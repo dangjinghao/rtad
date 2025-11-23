@@ -29,11 +29,14 @@
 #define RTAD_PACKED_STRUCT(decl) decl
 #endif
 
-#define RTAD_MAGIC "RTAD"
+#define RTAD_MAGIC "\x2aRTAD"
+#define RTAD_MAGIC_SIZE 5
 RTAD_PACKED_STRUCT(struct rtad_hdr {
   size_t data_size;
-  char magic[4];
+  char magic[RTAD_MAGIC_SIZE];
 });
+
+#define RTAD_HDR_SIZE (sizeof(struct rtad_hdr))
 
 #if defined(_WIN32)
 /**
@@ -42,7 +45,7 @@ RTAD_PACKED_STRUCT(struct rtad_hdr {
  * @param bufsize Size of the buffer
  * @return 0 on success, -1 on failure
  */
-int current_exe_path(char *buffer, size_t bufsize) {
+static int exe_path(char *buffer, size_t bufsize) {
   if (!buffer || bufsize == 0)
     return -1;
   DWORD len = GetModuleFileNameA(NULL, buffer, (DWORD)bufsize);
@@ -55,6 +58,26 @@ int current_exe_path(char *buffer, size_t bufsize) {
   return 0;
 }
 
+int file_truncate(const char *path, size_t size) {
+  HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+                             FILE_ATTRIBUTE_NORMAL, NULL);
+  if (hFile == INVALID_HANDLE_VALUE) {
+    return -1;
+  }
+  LARGE_INTEGER li;
+  li.QuadPart = (LONGLONG)size;
+  if (SetFilePointerEx(hFile, li, NULL, FILE_BEGIN) == 0) {
+    CloseHandle(hFile);
+    return -1;
+  }
+  if (SetEndOfFile(hFile) == 0) {
+    CloseHandle(hFile);
+    return -1;
+  }
+  CloseHandle(hFile);
+  return 0;
+}
+
 #elif defined(__APPLE__)
 /**
  * Get the path of the current executable (macOS implementation)
@@ -62,7 +85,7 @@ int current_exe_path(char *buffer, size_t bufsize) {
  * @param bufsize Size of the buffer
  * @return 0 on success, -1 on failure
  */
-int current_exe_path(char *buffer, size_t bufsize) {
+static int exe_path(char *buffer, size_t bufsize) {
   if (!buffer || bufsize == 0)
     return -1;
   uint32_t size = (uint32_t)bufsize;
@@ -74,6 +97,11 @@ int current_exe_path(char *buffer, size_t bufsize) {
   }
   return 0;
 }
+
+int file_truncate(const char *path, size_t size) {
+  return truncate(path, size);
+}
+
 #elif defined(__linux__)
 /**
  * Get the path of the current executable (Linux/Unix implementation)
@@ -81,19 +109,24 @@ int current_exe_path(char *buffer, size_t bufsize) {
  * @param bufsize Size of the buffer
  * @return 0 on success, -1 on failure
  */
-int current_exe_path(char *buffer, size_t bufsize) {
-  if (!buffer || bufsize == 0)
+static int exe_path(char *buffer, size_t buf_size) {
+  if (!buffer || buf_size == 0)
     return -1;
-  ssize_t len = readlink("/proc/self/exe", buffer, bufsize - 1);
+  ssize_t len = readlink("/proc/self/exe", buffer, buf_size - 1);
   if (len == -1) {
     return -1;
   }
   buffer[len] = '\0';
   return 0;
 }
+
+int file_truncate(const char *path, size_t size) {
+  return truncate(path, size);
+}
+
 #else
 
-#error "Unsupported platform"
+#error "Define failed: Unsupported platform"
 
 #endif
 
@@ -118,14 +151,9 @@ ssize_t file_length(const char *path) {
   fclose(fp);
   return size;
 }
-// TODO: check whether the data is existing already, if so, replace it
-int copy_self_with_data(const char *dest_path, const char *append_data,
-                        size_t append_data_size, size_t append_size) {
-  char buf[PATH_MAX];
-  if (current_exe_path(buf, sizeof(buf)) != 0) {
-    return -1;
-  }
-  FILE *src_fp = fopen(buf, "rb");
+
+int file_copy(const char *src_path, const char *dest_path) {
+  FILE *src_fp = fopen(src_path, "rb");
   if (!src_fp) {
     return -1;
   }
@@ -134,81 +162,146 @@ int copy_self_with_data(const char *dest_path, const char *append_data,
     fclose(src_fp);
     return -1;
   }
-  // Copy original executable content
   char copy_buf[BUFFER_SIZE];
   size_t bytes;
   while ((bytes = fread(copy_buf, 1, sizeof(copy_buf), src_fp)) > 0) {
     fwrite(copy_buf, 1, bytes, dest_fp);
   }
   fclose(src_fp);
-  //   create wrapper header
-  struct rtad_hdr header;
-  header.data_size = append_size;
-  memcpy(header.magic, RTAD_MAGIC, sizeof(header.magic));
-  // Append additional data
-  fwrite(append_data, 1, append_data_size, dest_fp);
-  // Append header
-  fwrite(&header, 1, sizeof(header), dest_fp);
   fclose(dest_fp);
   return 0;
 }
 
-int extract_data(const char *exe_path, char **out_data, size_t *out_data_size) {
-  FILE *fp = NULL;
-  char *data_buf = NULL;
+int file_copy_self(const char *dest_path) {
+  char pathBuf[PATH_MAX];
+  if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
+    return -1;
+  }
+  return file_copy(pathBuf, dest_path);
+}
 
-  if (!exe_path || !out_data || !out_data_size) {
-    goto FAIL;
-  }
-  fp = fopen(exe_path, "rb");
+int file_append_data(const char *path, const char *data, size_t data_size) {
+  FILE *fp = fopen(path, "ab");
   if (!fp) {
-    goto FAIL;
+    return -1;
   }
-  if (fseek(fp, -((long)sizeof(struct rtad_hdr)), SEEK_END) != 0) {
-    goto FAIL;
+  size_t written = fwrite(data, 1, data_size, fp);
+  if (written != data_size) {
+    fclose(fp);
+    return -1;
+  }
+  fclose(fp);
+  return 0;
+}
+
+int rtad_extract_hdr(const char *exe_path, struct rtad_hdr *header) {
+  FILE *fp = fopen(exe_path, "rb");
+  if (!fp) {
+    return -1;
+  }
+  if (fseek(fp, -((long)RTAD_HDR_SIZE), SEEK_END) != 0) {
+    fclose(fp);
+    return -1;
+  }
+  struct rtad_hdr temp_header;
+  if (fread(&temp_header, 1, sizeof(temp_header), fp) != sizeof(temp_header)) {
+    fclose(fp);
+    return -1;
+  }
+  fclose(fp);
+  fp = NULL;
+  if (memcmp(temp_header.magic, RTAD_MAGIC, sizeof(temp_header.magic)) != 0) {
+    return -1;
+  }
+  if (header) {
+    *header = temp_header;
+  } else {
+    return -1;
+  }
+  return 0;
+}
+
+int rtad_trunacte_data(const char *exe_path) {
+  struct rtad_hdr header;
+  if (rtad_extract_hdr(exe_path, &header) != 0) {
+    return -1;
+  }
+  ssize_t file_size = file_length(exe_path);
+  if (file_size < 0) {
+    return -1;
+  }
+  size_t new_size =
+      (size_t)file_size - (header.data_size + sizeof(struct rtad_hdr));
+  if (file_truncate(exe_path, new_size) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+int rtad_copy_self_with_data(const char *dest_path, const char *append_data,
+                             size_t append_data_size) {
+  if (file_copy_self(dest_path) != 0) {
+    return -1;
+  }
+  // try to truncate
+  rtad_trunacte_data(dest_path);
+  if (file_append_data(dest_path, append_data, append_data_size) != 0) {
+    return -1;
   }
   struct rtad_hdr header;
-  if (fread(&header, 1, sizeof(header), fp) != sizeof(header)) {
-    goto FAIL;
+  header.data_size = append_data_size;
+  memcpy(header.magic, RTAD_MAGIC, sizeof(header.magic));
+  if (file_append_data(dest_path, (const char *)&header, sizeof(header)) != 0) {
+    return -1;
   }
-  if (memcmp(header.magic, RTAD_MAGIC, sizeof(header.magic)) != 0) {
-    goto FAIL;
+  return 0;
+}
+
+int rtad_extract_data(const char *exe_path, char **out_data,
+                      size_t *out_data_size) {
+  struct rtad_hdr header;
+  if (rtad_extract_hdr(exe_path, &header) != 0) {
+    return -1;
   }
-  size_t append_size = header.data_size;
-  if (fseek(fp, -(long)(sizeof(header) + append_size), SEEK_END) != 0) {
-    goto FAIL;
+  FILE *fp = fopen(exe_path, "rb");
+  if (!fp) {
+    return -1;
   }
-  data_buf = malloc(append_size);
+  if (fseek(fp, -((long)(header.data_size + sizeof(struct rtad_hdr))),
+            SEEK_END) != 0) {
+    fclose(fp);
+    return -1;
+  }
+  char *data_buf = (char *)malloc(header.data_size);
   if (!data_buf) {
-    goto FAIL;
+    fclose(fp);
+    return -1;
   }
-  if (fread(data_buf, 1, append_size, fp) != append_size) {
-    goto FAIL;
+  if (fread(data_buf, 1, header.data_size, fp) != header.data_size) {
+    free(data_buf);
+    fclose(fp);
+    return -1;
   }
   fclose(fp);
   *out_data = data_buf;
-  *out_data_size = append_size;
+  if (out_data_size) {
+    *out_data_size = header.data_size;
+  }
   return 0;
-FAIL:
-  if (fp)
-    fclose(fp);
-  if (data_buf)
-    free(data_buf);
-  return -1;
 }
 
 int extract_self_data(char **out_data, size_t *out_data_size) {
   char pathBuf[PATH_MAX];
-  if (current_exe_path(pathBuf, sizeof(pathBuf)) != 0) {
+  if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
     return -1;
   }
-  return extract_data(pathBuf, out_data, out_data_size);
+  return rtad_extract_data(pathBuf, out_data, out_data_size);
 }
 
 int test(void) {
   char pathBuf[PATH_MAX];
-  if (current_exe_path(pathBuf, sizeof(pathBuf)) != 0) {
-    perror("current_exe_path failed");
+  if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
+    perror("exe_path failed");
     return 1;
   }
   printf("Current exe: %s\n", pathBuf);
@@ -224,8 +317,7 @@ int test(void) {
   size_t payload_len = strlen(payload) + 1; // Include null terminator
 
   printf("Creating %s with payload...\n", output_path);
-  if (copy_self_with_data(output_path, payload, payload_len, payload_len) !=
-      0) {
+  if (rtad_copy_self_with_data(output_path, payload, payload_len) != 0) {
     fprintf(stderr, "Failed to copy self with data.\n");
     return 1;
   }
@@ -233,7 +325,7 @@ int test(void) {
   printf("Verifying payload from %s...\n", output_path);
   char *read_data = NULL;
   size_t read_size = 0;
-  if (extract_data(output_path, &read_data, &read_size) != 0) {
+  if (rtad_extract_data(output_path, &read_data, &read_size) != 0) {
     fprintf(stderr, "Failed to extract data.\n");
     // Try to clean up even if extract failed
     remove(output_path);
@@ -272,7 +364,7 @@ int main(int argc, char *argv[]) {
     const char *output_path = "rtad_test_out";
 #endif
     size_t data_size = sizeof(data); // Include null terminator
-    if (copy_self_with_data(output_path, data, data_size, data_size) != 0) {
+    if (rtad_copy_self_with_data(output_path, data, data_size) != 0) {
       fprintf(stderr, "Failed to create self with data.\n");
       return 1;
     }
@@ -284,8 +376,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "No appended data found in the executable.\n");
       return 1;
     }
-    int ok = strcmp(data, out_data) == 0;
-    if (ok) {
+    if (strcmp(data, out_data) == 0) {
       printf("Appended data matches expected: %s\n", out_data);
     } else {
       printf("Appended data does not match expected!: %s\n", out_data);

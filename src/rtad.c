@@ -8,6 +8,7 @@
 #elif defined(__APPLE__)
 #include <limits.h>
 #include <mach-o/dyld.h>
+#include <unistd.h>
 #elif defined(__linux__)
 #include <limits.h>
 #include <unistd.h>
@@ -29,7 +30,7 @@
 #define RTAD_PACKED_STRUCT(decl) decl
 #endif
 
-#define RTAD_MAGIC "\x2aRTAD"
+#define RTAD_MAGIC "*RTAD"
 #define RTAD_MAGIC_SIZE 5
 RTAD_PACKED_STRUCT(struct rtad_hdr {
   size_t data_size;
@@ -147,7 +148,7 @@ ssize_t file_length(const char *path) {
     fclose(fp);
     return -1;
   }
-  long long size = ftell(fp);
+  long size = ftell(fp);
   fclose(fp);
   return size;
 }
@@ -195,6 +196,9 @@ int file_append_data(const char *path, const char *data, size_t data_size) {
 }
 
 int rtad_extract_hdr(const char *exe_path, struct rtad_hdr *header) {
+  if (!header) {
+    return -1;
+  }
   FILE *fp = fopen(exe_path, "rb");
   if (!fp) {
     return -1;
@@ -213,18 +217,14 @@ int rtad_extract_hdr(const char *exe_path, struct rtad_hdr *header) {
   if (memcmp(temp_header.magic, RTAD_MAGIC, sizeof(temp_header.magic)) != 0) {
     return -1;
   }
-  if (header) {
-    *header = temp_header;
-  } else {
-    return -1;
-  }
+  *header = temp_header;
   return 0;
 }
 
-int rtad_trunacte_data(const char *exe_path) {
+int rtad_truncate_data(const char *exe_path) {
   struct rtad_hdr header;
   if (rtad_extract_hdr(exe_path, &header) != 0) {
-    return -1;
+    return 0;
   }
   ssize_t file_size = file_length(exe_path);
   if (file_size < 0) {
@@ -244,7 +244,7 @@ int rtad_copy_self_with_data(const char *dest_path, const char *append_data,
     return -1;
   }
   // try to truncate
-  rtad_trunacte_data(dest_path);
+  rtad_truncate_data(dest_path);
   if (file_append_data(dest_path, append_data, append_data_size) != 0) {
     return -1;
   }

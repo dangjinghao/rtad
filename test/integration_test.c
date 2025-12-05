@@ -3,8 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32)
+#include <windows.h>
+#define PATH_MAX MAX_PATH
+#else if defined(__GNUC__) || defined(__clang__)
 #include <unistd.h>
-
+#endif
 int test(void) {
   char pathBuf[PATH_MAX];
   if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {

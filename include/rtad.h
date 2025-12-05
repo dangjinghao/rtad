@@ -4,10 +4,12 @@
 
 #if defined(_MSC_VER)
 #define ssize_t SSIZE_T
+
 #elif defined(__GNUC__) || defined(__clang__)
 #include <unistd.h>
 
 #endif
+#include <limits.h>
 
 int exe_path(char *buffer, size_t buf_size);
 int file_truncate(const char *path, size_t size);

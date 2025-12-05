@@ -94,6 +94,10 @@ int exe_path(char *buffer, size_t buf_size) {
   ssize_t len = readlink("/proc/self/exe", buffer, buf_size - 1);
   if (len == -1) {
     return -1;
+  } else if(len >= (size_t)(buf_size - 1)) {
+    // Buffer too small
+    buffer[buf_size - 1] = '\0';
+    return -1;
   }
   buffer[len] = '\0';
   return 0;

@@ -92,10 +92,10 @@ int file_truncate(const char *path, size_t size) {
 int exe_path(char *buffer, size_t buf_size) {
   if (!buffer || buf_size == 0)
     return -1;
-  ssize_t len = readlink("/proc/self/exe", buffer, buf_size - 1);
+  ssize_t len = readlink("/proc/self/exe", buffer, buf_size);
   if (len == -1) {
     return -1;
-  } else if(len >= (size_t)(buf_size - 1)) {
+  } else if (len == buf_size) {
     // Buffer too small
     buffer[buf_size - 1] = '\0';
     return -1;

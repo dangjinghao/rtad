@@ -6,7 +6,7 @@
 #if defined(_WIN32)
 #include <windows.h>
 #define PATH_MAX MAX_PATH
-#else if defined(__GNUC__) || defined(__clang__)
+#elif defined(__GNUC__) || defined(__clang__)
 #include <unistd.h>
 #endif
 int test(void) {

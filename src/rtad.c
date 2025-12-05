@@ -1,14 +1,12 @@
 #if defined(_WIN32)
 #define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
-#ifndef PATH_MAX
-#define PATH_MAX MAX_PATH
-#define ssize_t SSIZE_T
-#endif
+
 #elif defined(__APPLE__)
 #include <limits.h>
 #include <mach-o/dyld.h>
 #include <unistd.h>
+
 #elif defined(__linux__)
 #include <limits.h>
 #include <unistd.h>
@@ -22,30 +20,22 @@
 #define BUFFER_SIZE 4096
 
 #if defined(_MSC_VER)
+#define PATH_MAX MAX_PATH
+#define ssize_t SSIZE_T
+#define off_t __int64
+#define fseeko _fseeki64
+#define ftello _ftelli64
 #define RTAD_PACKED_STRUCT(decl)                                               \
   __pragma(pack(push, 1)) decl __pragma(pack(pop))
+
 #elif defined(__GNUC__) || defined(__clang__)
 #define RTAD_PACKED_STRUCT(decl) decl __attribute__((packed))
+
 #else
 #define RTAD_PACKED_STRUCT(decl) decl
 #endif
 
-#define RTAD_MAGIC "*RTAD"
-#define RTAD_MAGIC_SIZE 5
-RTAD_PACKED_STRUCT(struct rtad_hdr {
-  size_t data_size;
-  char magic[RTAD_MAGIC_SIZE];
-});
-
-#define RTAD_HDR_SIZE (sizeof(struct rtad_hdr))
-
 #if defined(_WIN32)
-/**
- * Get the path of the current executable (Windows implementation)
- * @param buffer Buffer to store the path
- * @param bufsize Size of the buffer
- * @return 0 on success, -1 on failure
- */
 static int exe_path(char *buffer, size_t bufsize) {
   if (!buffer || bufsize == 0)
     return -1;
@@ -59,7 +49,7 @@ static int exe_path(char *buffer, size_t bufsize) {
   return 0;
 }
 
-int file_truncate(const char *path, size_t size) {
+static int file_truncate(const char *path, size_t size) {
   HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
                              FILE_ATTRIBUTE_NORMAL, NULL);
   if (hFile == INVALID_HANDLE_VALUE) {
@@ -80,12 +70,6 @@ int file_truncate(const char *path, size_t size) {
 }
 
 #elif defined(__APPLE__)
-/**
- * Get the path of the current executable (macOS implementation)
- * @param buffer Buffer to store the path
- * @param bufsize Size of the buffer
- * @return 0 on success, -1 on failure
- */
 static int exe_path(char *buffer, size_t bufsize) {
   if (!buffer || bufsize == 0)
     return -1;
@@ -99,17 +83,11 @@ static int exe_path(char *buffer, size_t bufsize) {
   return 0;
 }
 
-int file_truncate(const char *path, size_t size) {
-  return truncate(path, size);
+static int file_truncate(const char *path, size_t size) {
+  return truncate(path, (off_t)size);
 }
 
 #elif defined(__linux__)
-/**
- * Get the path of the current executable (Linux/Unix implementation)
- * @param buffer Buffer to store the path
- * @param bufsize Size of the buffer
- * @return 0 on success, -1 on failure
- */
 static int exe_path(char *buffer, size_t buf_size) {
   if (!buffer || buf_size == 0)
     return -1;
@@ -121,8 +99,8 @@ static int exe_path(char *buffer, size_t buf_size) {
   return 0;
 }
 
-int file_truncate(const char *path, size_t size) {
-  return truncate(path, size);
+static int file_truncate(const char *path, size_t size) {
+  return truncate(path, (off_t)size);
 }
 
 #else
@@ -131,11 +109,15 @@ int file_truncate(const char *path, size_t size) {
 
 #endif
 
-/**
- * Get the size of a file by path
- * @param path File path
- * @return File size in bytes, or -1 on failure
- */
+#define RTAD_MAGIC "*RTAD"
+#define RTAD_MAGIC_SIZE 5
+RTAD_PACKED_STRUCT(struct rtad_hdr {
+  size_t data_size;
+  char magic[RTAD_MAGIC_SIZE];
+});
+
+#define RTAD_HDR_SIZE (sizeof(struct rtad_hdr))
+
 ssize_t file_length(const char *path) {
   if (path == NULL) {
     return -1;
@@ -148,7 +130,7 @@ ssize_t file_length(const char *path) {
     fclose(fp);
     return -1;
   }
-  long size = ftell(fp);
+  off_t size = ftello(fp);
   fclose(fp);
   return size;
 }
@@ -203,7 +185,7 @@ int rtad_extract_hdr(const char *exe_path, struct rtad_hdr *header) {
   if (!fp) {
     return -1;
   }
-  if (fseek(fp, -((long)RTAD_HDR_SIZE), SEEK_END) != 0) {
+  if (fseeko(fp, -((off_t)RTAD_HDR_SIZE), SEEK_END) != 0) {
     fclose(fp);
     return -1;
   }
@@ -267,8 +249,8 @@ int rtad_extract_data(const char *exe_path, char **out_data,
   if (!fp) {
     return -1;
   }
-  if (fseek(fp, -((long)(header.data_size + sizeof(struct rtad_hdr))),
-            SEEK_END) != 0) {
+  if (fseeko(fp, -((off_t)(header.data_size + sizeof(struct rtad_hdr))),
+             SEEK_END) != 0) {
     fclose(fp);
     return -1;
   }

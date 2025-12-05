@@ -3,12 +3,14 @@
 #include <stddef.h>
 
 #if defined(_MSC_VER)
+#include <windows.h>
 #define ssize_t SSIZE_T
 
 #elif defined(__GNUC__) || defined(__clang__)
 #include <unistd.h>
 
 #endif
+
 #include <limits.h>
 
 int exe_path(char *buffer, size_t buf_size);

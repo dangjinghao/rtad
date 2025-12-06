@@ -7,7 +7,8 @@ add_library(rtad src/rtad.c)
 target_include_directories(rtad PUBLIC include)
 
 
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
+set(BUILD_SHARED_LIBS OFF)
+set(WITH_TESTS OFF)
 
 include(FetchContent)
 FetchContent_Declare(

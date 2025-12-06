@@ -1,4 +1,12 @@
 #include "rtad.h"
+// clang-format off
+// Why cmocka needs stdarg.h but it doesn't include it by itself
+#include <setjmp.h> // IWYU pragma: keep
+#include <stdarg.h>
+#include <cmocka.h>
+// clang-format on
+#include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -14,46 +22,47 @@
 
 #include <limits.h>
 
-#include <assert.h>
-void test_exe_path_ok() {
+static void test_exe_path_ok(void **state) {
+  (void)state; /* unused */
   char buffer[PATH_MAX];
   int result = exe_path(buffer, sizeof(buffer));
-  assert(result == 0);
-  assert(strlen(buffer) > 0);
+  assert_int_equal(result, 0);
+  assert_true(strlen(buffer) > 0);
 }
 
-void test_exe_path_little_buffer() {
+static void test_exe_path_little_buffer(void **state) {
+  (void)state; /* unused */
   char buffer[2];
   int result = exe_path(buffer, sizeof(buffer));
-  assert(result == -1);
+  assert_int_equal(result, -1);
 }
 
-void test_exe_path_null_buffer() {
+static void test_exe_path_null_buffer(void **state) {
+  (void)state; /* unused */
   int result = exe_path(NULL, 0);
-  assert(result != 0);
+  assert_int_not_equal(result, 0);
 }
 
-void test_exe_path_buffer_with_0_length() {
+static void test_exe_path_buffer_with_0_length(void **state) {
+  (void)state; /* unused */
   char buffer[2];
   int result = exe_path(buffer, 0);
-  assert(result != 0);
+  assert_int_not_equal(result, 0);
 }
 
-void test_exe_path_null_buffer_with_wrong_length() {
-  char buffer[2];
-  int result = exe_path(buffer, 0);
-  assert(result != 0);
-}
-
-void test_file_truncate_ok(){
-
+static void test_exe_path_null_buffer_with_wrong_length(void **state) {
+  (void)state; /* unused */
+  int result = exe_path(NULL, 42);
+  assert_int_not_equal(result, 0);
 }
 
 int main(void) {
-  test_exe_path_ok();
-  test_exe_path_little_buffer();
-  test_exe_path_null_buffer();
-  test_exe_path_buffer_with_0_length();
-  test_exe_path_null_buffer_with_wrong_length();
-  return 0;
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_exe_path_ok),
+      cmocka_unit_test(test_exe_path_little_buffer),
+      cmocka_unit_test(test_exe_path_null_buffer),
+      cmocka_unit_test(test_exe_path_buffer_with_0_length),
+      cmocka_unit_test(test_exe_path_null_buffer_with_wrong_length),
+  };
+  return cmocka_run_group_tests(tests, NULL, NULL);
 }

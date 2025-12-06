@@ -2,6 +2,13 @@ cmake_minimum_required(VERSION 3.14)
 project(rtad C)
 
 
+# Add the main library
+add_library(rtad src/rtad.c)
+target_include_directories(rtad PUBLIC include)
+
+
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
+
 include(FetchContent)
 FetchContent_Declare(
   cmocka
@@ -9,10 +16,6 @@ FetchContent_Declare(
   GIT_TAG        cmocka-2.0.0
 )
 FetchContent_MakeAvailable(cmocka)
-
-# Add the main library
-add_library(rtad src/rtad.c)
-target_include_directories(rtad PUBLIC include)
 
 enable_testing()
 

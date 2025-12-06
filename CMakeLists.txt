@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(rtad C)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Add the main library
 add_library(rtad src/rtad.c)

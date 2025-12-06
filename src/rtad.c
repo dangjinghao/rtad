@@ -200,8 +200,10 @@ int rtad_copy_self_with_data(const char *dest_path, const char *append_data,
   if (file_append_data(dest_path, append_data, append_data_size) != 0) {
     return -1;
   }
-  struct rtad_hdr header;
-  header.data_size = append_data_size;
+  if(append_data_size > UINT32_MAX) {
+    return -1;
+  }
+  struct rtad_hdr header = {.data_size = (uint32_t)append_data_size };
   memcpy(header.magic, RTAD_MAGIC, sizeof(header.magic));
   if (file_append_data(dest_path, (const char *)&header, sizeof(header)) != 0) {
     return -1;

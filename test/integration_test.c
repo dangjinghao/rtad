@@ -1,4 +1,4 @@
-#include "rtad.h"
+#include "rtad_def.h"
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
   } else if (strcmp(argv[1], "check") == 0) {
     char *out_data = NULL;
     size_t out_data_size = 0;
-    if (extract_self_data(&out_data, &out_data_size) != 0) {
+    if (rtad_extract_self_data(&out_data, &out_data_size) != 0) {
       fprintf(stderr, "No appended data found in the executable.\n");
       return 1;
     }

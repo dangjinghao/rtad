@@ -1,43 +1,7 @@
-#if defined(_WIN32)
-#define _CRT_SECURE_NO_WARNINGS
-#include <windows.h>
-
-#elif defined(__APPLE__)
-#include <limits.h>
-#include <mach-o/dyld.h>
-#include <unistd.h>
-
-#elif defined(__linux__)
-#include <limits.h>
-#include <unistd.h>
-
-#endif
-
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#define BUFFER_SIZE 4096
-
-#if defined(_MSC_VER)
-#define PATH_MAX MAX_PATH
-#define ssize_t SSIZE_T
-#define off_t __int64
-#define fseeko _fseeki64
-#define ftello _ftelli64
-#define RTAD_PACKED_STRUCT(decl)                                               \
-  __pragma(pack(push, 1)) decl __pragma(pack(pop))
-
-#elif defined(__GNUC__) || defined(__clang__)
-#define RTAD_PACKED_STRUCT(decl) decl __attribute__((packed))
-
-#else
-#define RTAD_PACKED_STRUCT(decl) decl
-#endif
+#include "rtad_def.h"
 
 #if defined(_WIN32)
-int exe_path(char *buffer, size_t buf_size) {
+RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
   if (!buffer || buf_size == 0)
     return -1;
   DWORD len = GetModuleFileNameA(NULL, buffer, (DWORD)buf_size);
@@ -50,7 +14,7 @@ int exe_path(char *buffer, size_t buf_size) {
   return 0;
 }
 
-int file_truncate(const char *path, size_t size) {
+RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
                              FILE_ATTRIBUTE_NORMAL, NULL);
   if (hFile == INVALID_HANDLE_VALUE) {
@@ -71,7 +35,7 @@ int file_truncate(const char *path, size_t size) {
 }
 
 #elif defined(__APPLE__)
-int exe_path(char *buffer, size_t buf_size) {
+RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
   if (!buffer || buf_size == 0)
     return -1;
   uint32_t size = (uint32_t)buf_size;
@@ -84,12 +48,12 @@ int exe_path(char *buffer, size_t buf_size) {
   return 0;
 }
 
-int file_truncate(const char *path, size_t size) {
+RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   return truncate(path, (off_t)size);
 }
 
 #elif defined(__linux__)
-int exe_path(char *buffer, size_t buf_size) {
+RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
   if (!buffer || buf_size == 0)
     return -1;
   ssize_t len = readlink("/proc/self/exe", buffer, buf_size);
@@ -104,7 +68,7 @@ int exe_path(char *buffer, size_t buf_size) {
   return 0;
 }
 
-int file_truncate(const char *path, size_t size) {
+RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   return truncate(path, (off_t)size);
 }
 
@@ -115,15 +79,16 @@ int file_truncate(const char *path, size_t size) {
 #endif
 
 #define RTAD_MAGIC "*RTAD"
-#define RTAD_MAGIC_SIZE 5
+#define RTAD_MAGIC_SIZE (sizeof(RTAD_MAGIC) - 1)
+
 RTAD_PACKED_STRUCT(struct rtad_hdr {
-  size_t data_size;
+  uint32_t data_size; // max size: 4GiB
   char magic[RTAD_MAGIC_SIZE];
 });
 
 #define RTAD_HDR_SIZE (sizeof(struct rtad_hdr))
 
-ssize_t file_length(const char *path) {
+RTAD_PRIVATE ssize_t file_length(const char *path) {
   if (path == NULL) {
     return -1;
   }
@@ -140,7 +105,7 @@ ssize_t file_length(const char *path) {
   return size;
 }
 
-int file_copy(const char *src_path, const char *dest_path) {
+RTAD_PRIVATE int file_copy(const char *src_path, const char *dest_path) {
   FILE *src_fp = fopen(src_path, "rb");
   if (!src_fp) {
     return -1;
@@ -160,7 +125,7 @@ int file_copy(const char *src_path, const char *dest_path) {
   return 0;
 }
 
-int file_copy_self(const char *dest_path) {
+RTAD_PRIVATE int file_copy_self(const char *dest_path) {
   char pathBuf[PATH_MAX];
   if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
     return -1;
@@ -168,7 +133,7 @@ int file_copy_self(const char *dest_path) {
   return file_copy(pathBuf, dest_path);
 }
 
-int file_append_data(const char *path, const char *data, size_t data_size) {
+RTAD_PRIVATE int file_append_data(const char *path, const char *data, size_t data_size) {
   FILE *fp = fopen(path, "ab");
   if (!fp) {
     return -1;
@@ -277,7 +242,7 @@ int rtad_extract_data(const char *exe_path, char **out_data,
   return 0;
 }
 
-int extract_self_data(char **out_data, size_t *out_data_size) {
+int rtad_extract_self_data(char **out_data, size_t *out_data_size) {
   char pathBuf[PATH_MAX];
   if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
     return -1;

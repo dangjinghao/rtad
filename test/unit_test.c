@@ -1,4 +1,4 @@
-#include "rtad.h"
+#include "rtad_def.h"
 // clang-format off
 // Why cmocka needs stdarg.h but it doesn't include it by itself
 #include <setjmp.h> // IWYU pragma: keep

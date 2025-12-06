@@ -5,7 +5,6 @@
 #include <stdarg.h>
 #include <cmocka.h>
 // clang-format on
-#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>

@@ -14,6 +14,7 @@ RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
   return 0;
 }
 
+#if defined(_MSC_VER)
 RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
                              FILE_ATTRIBUTE_NORMAL, NULL);
@@ -33,6 +34,18 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   CloseHandle(hFile);
   return 0;
 }
+
+// GCC or Clang on Windows
+#elif defined(__GNUC__) || defined(__clang__)
+#include <unistd.h>
+RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
+  return truncate(path, (off_t)size);
+}
+
+#else
+#error "Define failed: Unsupported Windows compiler"
+
+#endif
 
 #elif defined(__APPLE__)
 RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
@@ -61,7 +74,6 @@ RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
     return -1;
   } else if (len == buf_size) {
     // Buffer too small
-    buffer[buf_size - 1] = '\0';
     return -1;
   }
   buffer[len] = '\0';
@@ -73,7 +85,6 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
 }
 
 #else
-
 #error "Define failed: Unsupported platform"
 
 #endif
@@ -133,7 +144,8 @@ RTAD_PRIVATE int file_copy_self(const char *dest_path) {
   return file_copy(pathBuf, dest_path);
 }
 
-RTAD_PRIVATE int file_append_data(const char *path, const char *data, size_t data_size) {
+RTAD_PRIVATE int file_append_data(const char *path, const char *data,
+                                  size_t data_size) {
   FILE *fp = fopen(path, "ab");
   if (!fp) {
     return -1;

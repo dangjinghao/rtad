@@ -1,35 +1,30 @@
 #ifndef __RTAD_PRIVATE_H__
 #define __RTAD_PRIVATE_H__
 
-#if defined(RTAD_TEST)
-#define RTAD_PRIVATE
-#else
-#define RTAD_PRIVATE static
-#endif
+#define BUFFER_SIZE 4096
 
+// platform-specific includes
 #if defined(_WIN32)
-#define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
 
 #elif defined(__APPLE__)
-#include <limits.h>
 #include <mach-o/dyld.h>
 #include <unistd.h>
 
 #elif defined(__linux__)
-#include <limits.h>
 #include <unistd.h>
 
 #endif
 
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define BUFFER_SIZE 4096
-
+// Cross-platform compatibility macros
 #if defined(_MSC_VER)
+#define _CRT_SECURE_NO_WARNINGS
 #define PATH_MAX MAX_PATH
 #define ssize_t SSIZE_T
 #define off_t __int64
@@ -42,11 +37,39 @@
 #define RTAD_PACKED_STRUCT(decl) decl __attribute__((packed))
 
 #else
+#warning                                                                       \
+    "Define failed: Unknown compiler, packing structure may not work correctly"
 #define RTAD_PACKED_STRUCT(decl) decl
 #endif
 
+#if defined(RTAD_TEST)
+#define RTAD_PRIVATE
+#else
+#define RTAD_PRIVATE static
+#endif
+
+// platform-specific implementations
+/**
+ * @brief Get the executable path, if the the return value is not 0,
+ * the buffer maybe not ended with '\0', so don't use the buffer if error
+ * happens.
+ *
+ * @param buffer
+ * @param buf_size
+ * @return 0 if success, -1 on error
+ */
 RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size);
+/**
+ * @brief A wrapper of platform-specific file truncate function,
+ * the behavior **SHOULD** be same as POSIX truncate.
+ *
+ * @param path
+ * @param size
+ * @return 0 if success, -1 on error
+ */
 RTAD_PRIVATE int file_truncate(const char *path, size_t size);
+
+// platform-independent implementations
 RTAD_PRIVATE ssize_t file_length(const char *path);
 RTAD_PRIVATE int file_copy(const char *src_path, const char *dest_path);
 RTAD_PRIVATE int file_copy_self(const char *dest_path);

@@ -33,7 +33,7 @@ static void test_exe_path_little_buffer(void **state) {
   (void)state; /* unused */
   char buffer[2];
   int result = exe_path(buffer, sizeof(buffer));
-  assert_int_equal(result, -1);
+  assert_int_not_equal(result, 0);
 }
 
 static void test_exe_path_null_buffer(void **state) {

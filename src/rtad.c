@@ -19,20 +19,22 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
                              FILE_ATTRIBUTE_NORMAL, NULL);
   if (hFile == INVALID_HANDLE_VALUE) {
-    return -1;
+      goto FAIL;
   }
-  LARGE_INTEGER li;
-  li.QuadPart = (LONGLONG)size;
+  LARGE_INTEGER li = {.QuadPart = (LONGLONG)size};
   if (SetFilePointerEx(hFile, li, NULL, FILE_BEGIN) == 0) {
-    CloseHandle(hFile);
-    return -1;
+	  goto FAIL;
   }
   if (SetEndOfFile(hFile) == 0) {
-    CloseHandle(hFile);
-    return -1;
+	  goto FAIL;
   }
   CloseHandle(hFile);
   return 0;
+FAIL:
+  if (hFile != INVALID_HANDLE_VALUE) {
+      CloseHandle(hFile);
+  }
+  return -1;
 }
 
 // GCC or Clang on Windows

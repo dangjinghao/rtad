@@ -16,7 +16,7 @@ RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
 
 #if defined(_MSC_VER)
 RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
-  HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+    HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
                              FILE_ATTRIBUTE_NORMAL, NULL);
   if (hFile == INVALID_HANDLE_VALUE) {
       goto FAIL;
@@ -91,11 +91,11 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
 
 #endif
 
-#define RTAD_MAGIC "*RTAD"
+#define RTAD_MAGIC "\x1*RTAD"
 #define RTAD_MAGIC_SIZE (sizeof(RTAD_MAGIC) - 1)
 
 RTAD_PACKED_STRUCT(struct rtad_hdr {
-  uint32_t data_size; // max size: 4GiB
+  uint32_t data_size; // max data size: 4GiB
   char magic[RTAD_MAGIC_SIZE];
 });
 

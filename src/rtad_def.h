@@ -62,6 +62,7 @@ RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size);
 /**
  * @brief A wrapper of platform-specific file truncate function,
  * the behavior **SHOULD** be same as POSIX truncate.
+ * This function is designed for shrinking file size.
  *
  * @param path
  * @param size
@@ -70,6 +71,17 @@ RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size);
 RTAD_PRIVATE int file_truncate(const char *path, size_t size);
 
 // platform-independent implementations
+
+#define RTAD_MAGIC "\x01*RTAD"
+#define RTAD_MAGIC_SIZE (sizeof(RTAD_MAGIC) - 1)
+
+RTAD_PACKED_STRUCT(struct rtad_hdr {
+  uint32_t data_size; // max size: 4GiB
+  char magic[RTAD_MAGIC_SIZE];
+});
+
+#define RTAD_HDR_SIZE (sizeof(struct rtad_hdr))
+
 RTAD_PRIVATE ssize_t file_length(const char *path);
 RTAD_PRIVATE int file_copy(const char *src_path, const char *dest_path);
 RTAD_PRIVATE int file_copy_self(const char *dest_path);

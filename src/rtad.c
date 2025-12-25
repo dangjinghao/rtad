@@ -39,7 +39,6 @@ FAIL:
 
 // GCC or Clang on Windows
 #elif defined(__GNUC__) || defined(__clang__)
-#include <unistd.h>
 RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   return truncate(path, (off_t)size);
 }
@@ -90,16 +89,6 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
 #error "Define failed: Unsupported platform"
 
 #endif
-
-#define RTAD_MAGIC "\x1*RTAD"
-#define RTAD_MAGIC_SIZE (sizeof(RTAD_MAGIC) - 1)
-
-RTAD_PACKED_STRUCT(struct rtad_hdr {
-  uint32_t data_size; // max data size: 4GiB
-  char magic[RTAD_MAGIC_SIZE];
-});
-
-#define RTAD_HDR_SIZE (sizeof(struct rtad_hdr))
 
 RTAD_PRIVATE ssize_t file_length(const char *path) {
   if (path == NULL) {

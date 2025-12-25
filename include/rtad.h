@@ -8,5 +8,5 @@ int rtad_copy_self_with_data(const char *dest_path, const char *append_data,
 int rtad_extract_data(const char *exe_path, char **out_data,
                       size_t *out_data_size);
 int rtad_extract_self_data(char **out_data, size_t *out_data_size);
-
+int rtad_validate_hdr(const char *exe_path);
 #endif

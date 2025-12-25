@@ -75,6 +75,8 @@ RTAD_PRIVATE int file_copy(const char *src_path, const char *dest_path);
 RTAD_PRIVATE int file_copy_self(const char *dest_path);
 RTAD_PRIVATE int file_append_data(const char *path, const char *data,
                                   size_t data_size);
+int rtad_extract_hdr(const char *exe_path, struct rtad_hdr *header);
+int rtad_validate_hdr(const char *exe_path);
 int rtad_truncate_data(const char *exe_path);
 int rtad_copy_self_with_data(const char *dest_path, const char *append_data,
                              size_t append_data_size);

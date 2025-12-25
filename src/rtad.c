@@ -187,6 +187,11 @@ int rtad_extract_hdr(const char *exe_path, struct rtad_hdr *header) {
   return 0;
 }
 
+int rtad_validate_hdr(const char *exe_path) {
+  struct rtad_hdr header;
+  return rtad_extract_hdr(exe_path, &header);
+}
+
 int rtad_truncate_data(const char *exe_path) {
   struct rtad_hdr header;
   if (rtad_extract_hdr(exe_path, &header) != 0) {

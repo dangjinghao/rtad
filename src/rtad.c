@@ -137,6 +137,9 @@ RTAD_PRIVATE int file_copy_self(const char *dest_path) {
 
 RTAD_PRIVATE int file_append_data(const char *path, const char *data,
                                   size_t data_size) {
+  if (!path || !data || data_size == 0) {
+    return -1;
+  }
   FILE *fp = fopen(path, "ab");
   if (!fp) {
     return -1;
@@ -163,6 +166,7 @@ int rtad_extract_hdr(const char *exe_path, struct rtad_hdr *header) {
     return -1;
   }
   struct rtad_hdr temp_header;
+  // too small file to contain header
   if (fread(&temp_header, 1, sizeof(temp_header), fp) != sizeof(temp_header)) {
     fclose(fp);
     return -1;
@@ -184,6 +188,7 @@ int rtad_validate_hdr(const char *exe_path) {
 int rtad_truncate_data(const char *exe_path) {
   struct rtad_hdr header;
   if (rtad_extract_hdr(exe_path, &header) != 0) {
+    // no valid header, nothing to truncate
     return 0;
   }
   ssize_t file_size = file_length(exe_path);
@@ -204,14 +209,16 @@ int rtad_copy_self_with_data(const char *dest_path, const char *append_data,
     return -1;
   }
   // try to truncate
-  rtad_truncate_data(dest_path);
+  if (rtad_truncate_data(dest_path) != 0) {
+    return -1;
+  }
   if (file_append_data(dest_path, append_data, append_data_size) != 0) {
     return -1;
   }
-  if(append_data_size > UINT32_MAX) {
+  if (append_data_size > UINT32_MAX) {
     return -1;
   }
-  struct rtad_hdr header = {.data_size = (uint32_t)append_data_size };
+  struct rtad_hdr header = {.data_size = (uint32_t)append_data_size};
   memcpy(header.magic, RTAD_MAGIC, sizeof(header.magic));
   if (file_append_data(dest_path, (const char *)&header, sizeof(header)) != 0) {
     return -1;

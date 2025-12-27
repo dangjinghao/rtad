@@ -211,14 +211,18 @@ int rtad_truncate_data(const char *exe_path) {
   if (!exe_path) {
     return -1;
   }
+
+  ssize_t file_size = file_length(exe_path);
+  if (file_size < 0) {
+    // could not get file size
+    // or file does not exist
+    return -1;
+  }
   if (rtad_extract_hdr(exe_path, &header) != 0) {
     // no valid header, nothing to truncate
     return 0;
   }
-  ssize_t file_size = file_length(exe_path);
-  if (file_size < 0) {
-    return -1;
-  }
+
   size_t new_size =
       (size_t)file_size - (header.data_size + sizeof(struct rtad_hdr));
   if (file_truncate(exe_path, new_size) != 0) {
@@ -296,6 +300,14 @@ int rtad_extract_data(const char *exe_path, char **out_data,
   if (out_data_size) {
     *out_data_size = header.data_size;
   }
+  return 0;
+}
+
+int rtad_free_extracted_data(char *data) {
+  if (!data) {
+    return -1;
+  }
+  free(data);
   return 0;
 }
 

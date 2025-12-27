@@ -324,6 +324,230 @@ static void test_rtad_validate_hdr_non_existing_file(void **state) {
 // Any other tests for rtad_validate_hdr can be covered by
 // test_rtad_extract_hdr_* tests.
 
+static void test_rtad_truncate_data_null_path(void **state) {
+  (void)state; /* unused */
+  int result = rtad_truncate_data(NULL);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_truncate_data_non_existing_file(void **state) {
+  (void)state; /* unused */
+  int result = rtad_truncate_data("non_existing_file");
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_truncate_data_invalid_hdr(void **state) {
+  (void)state; /* unused */
+  __create_tmp_file(__FUNCTION__);
+  int result = rtad_truncate_data(__FUNCTION__);
+  assert_int_equal(result, 0);
+}
+
+static void test_rtad_truncate_data_file_smaller_than_hdr(void **state) {
+  (void)state; /* unused */
+  const char *filename = __FUNCTION__;
+  FILE *fp = fopen(filename, "wb");
+  assert_non_null(fp);
+  // Write less than RTAD header size
+  for (size_t i = 0; i < sizeof(struct rtad_hdr) - 1; i++) {
+    fputc(0, fp);
+  }
+  fclose(fp);
+  int result = rtad_truncate_data(filename);
+  assert_int_equal(result, 0);
+}
+
+static void test_rtad_truncate_data_ok(void **state) {
+  (void)state; /* unused */
+  __create_tmp_file_append_data_hdr(__FUNCTION__, 20);
+  ssize_t length_before = file_length(__FUNCTION__);
+  int result = rtad_truncate_data(__FUNCTION__);
+  assert_int_equal(result, 0);
+  ssize_t length_after = file_length(__FUNCTION__);
+  assert_int_equal(length_before - length_after, 20 + sizeof(struct rtad_hdr));
+}
+
+static void test_rtad_append_packed_data_null_dest_path(void **state) {
+  (void)state; /* unused */
+  const char data[] = "data";
+  int result = rtad_append_packed_data(NULL, data, sizeof(data));
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_append_packed_data_null_data(void **state) {
+  (void)state; /* unused */
+  __create_tmp_file(__FUNCTION__);
+  int result = rtad_append_packed_data(__FUNCTION__, NULL, 10);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_append_packed_data_zero_size(void **state) {
+  (void)state; /* unused */
+  __create_tmp_file(__FUNCTION__);
+  const char data[] = "data";
+  int result = rtad_append_packed_data(__FUNCTION__, data, 0);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_append_packed_data_larger_than_uint32_max(void **state) {
+  (void)state; /* unused */
+  __create_tmp_file(__FUNCTION__);
+  const char data[] = "data";
+  int result =
+      rtad_append_packed_data(__FUNCTION__, data, (size_t)UINT32_MAX + 1);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_append_packed_data_ok(void **state) {
+  (void)state; /* unused */
+  __create_tmp_file(__FUNCTION__);
+  static const char data[] = "Hello, RTAD!";
+  size_t data_size = strlen(data);
+  int result = rtad_append_packed_data(__FUNCTION__, data, data_size);
+  assert_int_equal(result, 0);
+  // Validate by extracting header
+  struct rtad_hdr hdr_out;
+  result = rtad_extract_hdr(__FUNCTION__, &hdr_out);
+  assert_int_equal(result, 0);
+  assert_int_equal(hdr_out.data_size, data_size);
+  assert_memory_equal(hdr_out.magic, RTAD_MAGIC, RTAD_MAGIC_SIZE);
+  // check the appended data
+  FILE *fp = fopen(__FUNCTION__, "rb");
+  assert_non_null(fp);
+  // Seek to the start of appended data
+  fseeko(fp, -(ssize_t)(data_size + sizeof(struct rtad_hdr)), SEEK_END);
+  char *data_buf = (char *)malloc(data_size);
+  fread(data_buf, 1, data_size, fp);
+  assert_memory_equal(data_buf, data, data_size);
+  free(data_buf);
+  fclose(fp);
+}
+
+static void test_rtad_copy_self_with_data_null_dest_path(void **state) {
+  (void)state; /* unused */
+  const char data[] = "data";
+  int result = rtad_copy_self_with_data(NULL, data, sizeof(data));
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_copy_self_with_data_null_append_data(void **state) {
+  (void)state; /* unused */
+  const char *dest_path = __FUNCTION__;
+  int result = rtad_copy_self_with_data(dest_path, NULL, 10);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_copy_self_with_data_zero_size(void **state) {
+  (void)state; /* unused */
+  const char *dest_path = __FUNCTION__;
+  const char data[] = "data";
+  int result = rtad_copy_self_with_data(dest_path, data, 0);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_copy_self_with_data_ok(void **state) {
+  (void)state; /* unused */
+  const char *dest_path = __FUNCTION__;
+  static const char data[] = "Hello, RTAD!";
+  size_t data_size = sizeof(data) - 1;
+
+  int result = rtad_copy_self_with_data(dest_path, data, data_size);
+  assert_int_equal(result, 0);
+  // Validate by extracting header
+  struct rtad_hdr hdr_out;
+  result = rtad_extract_hdr(dest_path, &hdr_out);
+  assert_int_equal(result, 0);
+  assert_int_equal(hdr_out.data_size, data_size);
+  assert_memory_equal(hdr_out.magic, RTAD_MAGIC, RTAD_MAGIC_SIZE);
+  // check the appended data
+  FILE *fp = fopen(dest_path, "rb");
+  assert_non_null(fp);
+  // Seek to the start of appended data
+  fseeko(fp, -(ssize_t)(data_size + sizeof(struct rtad_hdr)), SEEK_END);
+  char *data_buf = (char *)malloc(data_size);
+  fread(data_buf, 1, data_size, fp);
+  assert_memory_equal(data_buf, data, data_size);
+  free(data_buf);
+  fclose(fp);
+}
+
+static void test_rtad_extract_data_null_exe_path(void **state) {
+  (void)state; /* unused */
+  char *out_data = NULL;
+  size_t out_data_size = 0;
+  int result = rtad_extract_data(NULL, &out_data, &out_data_size);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_extract_data_null_out_data(void **state) {
+  (void)state; /* unused */
+  size_t out_data_size = 0;
+  int result = rtad_extract_data(__FUNCTION__, NULL, &out_data_size);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_extract_data_null_out_data_size(void **state) {
+  (void)state; /* unused */
+  char *out_data = NULL;
+  int result = rtad_extract_data(__FUNCTION__, &out_data, NULL);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_extract_data_ok(void **state) {
+  (void)state; /* unused */
+  static const char data[] = "Hello, RTAD!";
+  size_t data_size = sizeof(data) - 1;
+  __create_tmp_file(__FUNCTION__);
+  rtad_append_packed_data(__FUNCTION__, data, data_size);
+  char *out_data = NULL;
+  size_t out_data_size = 0;
+  int result = rtad_extract_data(__FUNCTION__, &out_data, &out_data_size);
+  assert_int_equal(result, 0);
+  assert_int_equal(out_data_size, data_size);
+  assert_memory_equal(out_data, data, data_size);
+  rtad_free_extracted_data(out_data);
+}
+
+// just ignore rtad_free_extracted_data error case, as it only frees memory
+
+static void test_rtad_extract_self_data_null_out_data(void **state) {
+  (void)state; /* unused */
+  int result = rtad_extract_self_data(NULL, NULL);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_extract_self_data_null_out_data_size(void **state) {
+  (void)state; /* unused */
+  char *out_data = NULL;
+  int result = rtad_extract_self_data(&out_data, NULL);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_extract_self_data_no_valid_rtad_data(void **state) {
+  (void)state; /* unused */
+  char *out_data = NULL;
+  size_t out_data_size = 0;
+  int result = rtad_extract_self_data(&out_data, &out_data_size);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_extract_self_data_ok(void **state) {
+  (void)state; /* unused */
+  static const char data[] = "Hello, RTAD!";
+  size_t data_size = sizeof(data) - 1;
+
+  const char *new_path = "test_rtad_extract_self_data_ok_self_copy";
+  rtad_copy_self_with_data(new_path, data, data_size);
+  // Now extract data from the copied file
+  char *out_data = NULL;
+  size_t out_data_size = 0;
+  int result = rtad_extract_data(new_path, &out_data, &out_data_size);
+  assert_int_equal(result, 0);
+  assert_int_equal(out_data_size, data_size);
+  assert_memory_equal(out_data, data, data_size);
+  rtad_free_extracted_data(out_data);
+}
+
 int main(void) {
   const struct CMUnitTest tests[] = {
       cmocka_unit_test(test_exe_path_ok),
@@ -358,7 +582,28 @@ int main(void) {
       cmocka_unit_test(test_rtad_extract_hdr_null_path),
       cmocka_unit_test(test_file_truncate_null_path),
       cmocka_unit_test(test_file_length_null_path),
-
+      cmocka_unit_test(test_rtad_truncate_data_null_path),
+      cmocka_unit_test(test_rtad_truncate_data_non_existing_file),
+      cmocka_unit_test(test_rtad_truncate_data_invalid_hdr),
+      cmocka_unit_test(test_rtad_truncate_data_file_smaller_than_hdr),
+      cmocka_unit_test(test_rtad_truncate_data_ok),
+      cmocka_unit_test(test_rtad_append_packed_data_null_dest_path),
+      cmocka_unit_test(test_rtad_append_packed_data_null_data),
+      cmocka_unit_test(test_rtad_append_packed_data_zero_size),
+      cmocka_unit_test(test_rtad_append_packed_data_larger_than_uint32_max),
+      cmocka_unit_test(test_rtad_append_packed_data_ok),
+      cmocka_unit_test(test_rtad_copy_self_with_data_null_dest_path),
+      cmocka_unit_test(test_rtad_copy_self_with_data_null_append_data),
+      cmocka_unit_test(test_rtad_copy_self_with_data_zero_size),
+      cmocka_unit_test(test_rtad_copy_self_with_data_ok),
+      cmocka_unit_test(test_rtad_extract_data_null_exe_path),
+      cmocka_unit_test(test_rtad_extract_data_null_out_data),
+      cmocka_unit_test(test_rtad_extract_data_null_out_data_size),
+      cmocka_unit_test(test_rtad_extract_data_ok),
+      cmocka_unit_test(test_rtad_extract_self_data_null_out_data),
+      cmocka_unit_test(test_rtad_extract_self_data_null_out_data_size),
+      cmocka_unit_test(test_rtad_extract_self_data_no_valid_rtad_data),
+      cmocka_unit_test(test_rtad_extract_self_data_ok),
   };
   return cmocka_run_group_tests(tests, NULL, NULL);
 }

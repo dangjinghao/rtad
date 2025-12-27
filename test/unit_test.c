@@ -54,7 +54,7 @@ static void test_exe_path_null_buffer_with_wrong_length(void **state) {
   assert_int_not_equal(result, 0);
 }
 
-const size_t TMP_FILE_SIZE = 1024 * 512;
+const size_t TMP_FILE_SIZE = 1024 * 16;
 // Just create, not delete.
 // There is not file delete function in standard C library.
 static void __create_tmp_file(const char *filename) {
@@ -63,6 +63,45 @@ static void __create_tmp_file(const char *filename) {
   for (size_t i = 0; i < TMP_FILE_SIZE; i++) {
     fputc(i, fp);
   }
+  fclose(fp);
+}
+
+static int __file_content_cmp(const char *path1, const char *path2) {
+  FILE *fp1 = fopen(path1, "rb");
+  if (!fp1) {
+    return -1;
+  }
+  FILE *fp2 = fopen(path2, "rb");
+  if (!fp2) {
+    fclose(fp1);
+    return -1;
+  }
+  int ch1, ch2;
+  do {
+    ch1 = fgetc(fp1);
+    ch2 = fgetc(fp2);
+    if (ch1 != ch2) {
+      fclose(fp1);
+      fclose(fp2);
+      return 1;
+    }
+  } while (ch1 != EOF && ch2 != EOF);
+  fclose(fp1);
+  fclose(fp2);
+  return 0;
+}
+
+static void __create_tmp_file_append_data_hdr(const char *filename,
+                                              size_t data_length) {
+  __create_tmp_file(filename);
+  FILE *fp = fopen(filename, "ab");
+  assert_non_null(fp);
+  for (size_t i = 0; i < data_length; i++) {
+    fputc(i, fp);
+  }
+  struct rtad_hdr header = {.data_size = (uint32_t)data_length};
+  memcpy(header.magic, RTAD_MAGIC, sizeof(header.magic));
+  fwrite(&header, sizeof(header), 1, fp);
   fclose(fp);
 }
 
@@ -81,6 +120,12 @@ static void test_file_truncate_wrong_path(void **state) {
   assert_int_equal(result, -1);
 }
 
+static void test_file_truncate_null_path(void **state) {
+  (void)state; /* unused */
+  int result = file_truncate(NULL, 1024);
+  assert_int_equal(result, -1);
+}
+
 static void test_file_length_ok(void **state) {
   (void)state; /* unused */
   __create_tmp_file(__FUNCTION__);
@@ -91,6 +136,12 @@ static void test_file_length_ok(void **state) {
 static void test_file_length_wrong_path(void **state) {
   (void)state; /* unused */
   ssize_t length = file_length("non_existing_file");
+  assert_int_equal(length, -1);
+}
+
+static void test_file_length_null_path(void **state) {
+  (void)state; /* unused */
+  ssize_t length = file_length(NULL);
   assert_int_equal(length, -1);
 }
 
@@ -120,31 +171,6 @@ static void test_file_copy_cannot_create_dest(void **state) {
   assert_int_equal(result, -1);
 }
 
-static int __file_content_cmp(const char *path1, const char *path2) {
-  FILE *fp1 = fopen(path1, "rb");
-  if (!fp1) {
-    return -1;
-  }
-  FILE *fp2 = fopen(path2, "rb");
-  if (!fp2) {
-    fclose(fp1);
-    return -1;
-  }
-  int ch1, ch2;
-  do {
-    ch1 = fgetc(fp1);
-    ch2 = fgetc(fp2);
-    if (ch1 != ch2) {
-      fclose(fp1);
-      fclose(fp2);
-      return 1;
-    }
-  } while (ch1 != EOF && ch2 != EOF);
-  fclose(fp1);
-  fclose(fp2);
-  return 0;
-}
-
 static void test_file_copy_self_ok(void **state) {
   (void)state; /* unused */
   const char *dest_path = "test_file_copy_self_ok_dest";
@@ -154,6 +180,19 @@ static void test_file_copy_self_ok(void **state) {
   char exe_path_buffer[PATH_MAX];
   exe_path(exe_path_buffer, sizeof(exe_path_buffer));
   assert_int_equal(__file_content_cmp(exe_path_buffer, dest_path), 0);
+}
+
+static void test_file_copy_self_null_dest(void **state) {
+  (void)state; /* unused */
+  int result = file_copy_self(NULL);
+  assert_int_equal(result, -1);
+}
+
+static void test_file_copy_self_invalid_dest(void **state) {
+  (void)state; /* unused */
+  // Try to copy to a directory
+  int result = file_copy_self(".");
+  assert_int_equal(result, -1);
 }
 
 static void test_file_append_data_20_bytes(void **state) {
@@ -210,11 +249,80 @@ static void test_rtad_extract_hdr_no_buffer(void **state) {
 
 static void test_rtad_extract_hdr_non_existing_file(void **state) {
   (void)state; /* unused */
-  int result = rtad_extract_hdr("non_existing_file", NULL);
+  struct rtad_hdr hdr;
+  int result = rtad_extract_hdr("non_existing_file", &hdr);
   assert_int_equal(result, -1);
 }
 
+static void test_rtad_extract_hdr_invalid_file(void **state) {
+  (void)state; /* unused */
+  struct rtad_hdr hdr;
+  int result = rtad_extract_hdr(".", &hdr);
+  assert_int_equal(result, -1);
+}
 
+static void test_rtad_extract_hdr_invalid_hdr(void **state) {
+  (void)state; /* unused */
+  __create_tmp_file(__FUNCTION__);
+  struct rtad_hdr hdr;
+  int result = rtad_extract_hdr(__FUNCTION__, &hdr);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_extract_hdr_null_path(void **state) {
+  (void)state; /* unused */
+  struct rtad_hdr hdr;
+  int result = rtad_extract_hdr(NULL, &hdr);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_extract_hdr_too_small_file(void **state) {
+  (void)state; /* unused */
+  const char *filename = __FUNCTION__;
+  FILE *fp = fopen(filename, "wb");
+  assert_non_null(fp);
+  // Write less than RTAD header size
+  for (size_t i = 0; i < sizeof(struct rtad_hdr) - 1; i++) {
+    fputc(0, fp);
+  }
+  fclose(fp);
+  struct rtad_hdr hdr;
+  int result = rtad_extract_hdr(filename, &hdr);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_extract_hdr_ok(void **state) {
+  (void)state; /* unused */
+  __create_tmp_file_append_data_hdr(__FUNCTION__, 10);
+  struct rtad_hdr hdr_out;
+  int result = rtad_extract_hdr(__FUNCTION__, &hdr_out);
+  assert_int_equal(result, 0);
+  assert_int_equal(hdr_out.data_size, 10);
+  assert_memory_equal(hdr_out.magic, RTAD_MAGIC, RTAD_MAGIC_SIZE);
+}
+
+static void test_rtad_validate_hdr_ok(void **state) {
+  (void)state; /* unused */
+  __create_tmp_file_append_data_hdr(__FUNCTION__, 10);
+  int result = rtad_validate_hdr(__FUNCTION__);
+  assert_int_equal(result, 0);
+}
+
+static void test_rtad_validate_hdr_invalid(void **state) {
+  (void)state; /* unused */
+  __create_tmp_file(__FUNCTION__);
+  int result = rtad_validate_hdr(__FUNCTION__);
+  assert_int_equal(result, -1);
+}
+
+static void test_rtad_validate_hdr_non_existing_file(void **state) {
+  (void)state; /* unused */
+  int result = rtad_validate_hdr("non_existing_file");
+  assert_int_equal(result, -1);
+}
+
+// Any other tests for rtad_validate_hdr can be covered by
+// test_rtad_extract_hdr_* tests.
 
 int main(void) {
   const struct CMUnitTest tests[] = {
@@ -238,6 +346,19 @@ int main(void) {
       cmocka_unit_test(test_file_append_data_zero_size),
       cmocka_unit_test(test_rtad_extract_hdr_no_buffer),
       cmocka_unit_test(test_rtad_extract_hdr_non_existing_file),
+      cmocka_unit_test(test_rtad_extract_hdr_too_small_file),
+      cmocka_unit_test(test_rtad_extract_hdr_invalid_file),
+      cmocka_unit_test(test_rtad_extract_hdr_invalid_hdr),
+      cmocka_unit_test(test_rtad_extract_hdr_ok),
+      cmocka_unit_test(test_rtad_validate_hdr_ok),
+      cmocka_unit_test(test_rtad_validate_hdr_invalid),
+      cmocka_unit_test(test_rtad_validate_hdr_non_existing_file),
+      cmocka_unit_test(test_file_copy_self_null_dest),
+      cmocka_unit_test(test_file_copy_self_invalid_dest),
+      cmocka_unit_test(test_rtad_extract_hdr_null_path),
+      cmocka_unit_test(test_file_truncate_null_path),
+      cmocka_unit_test(test_file_length_null_path),
+
   };
   return cmocka_run_group_tests(tests, NULL, NULL);
 }

@@ -27,7 +27,8 @@ jobs:
       run: |
         cmake -B build \
           -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
-          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_BUILD_TYPE=Release \
+          -DRTAD_BUILD_TESTS=ON
     
     - name: Build
       run: cmake --build build --config Release
@@ -55,7 +56,8 @@ jobs:
       run: |
         cmake -B build \
           -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
-          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_BUILD_TYPE=Release \
+          -DRTAD_BUILD_TESTS=ON
     
     - name: Build
       run: cmake --build build --config Release
@@ -86,7 +88,7 @@ jobs:
 
     - name: Configure
       run: |
-        cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.compiler }}
+        cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.compiler }} -DRTAD_BUILD_TESTS=ON
       
     - name: Build
       run: cmake --build build --config Release

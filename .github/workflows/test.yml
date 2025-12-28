@@ -84,23 +84,21 @@ jobs:
       run: ctest --output-on-failure -C Release
 
   windows:
-    name: Windows-x64-${{ matrix.compiler }}
+    name: Windows-x64-${{ matrix.cc }}
     runs-on: windows-latest
     strategy:
       matrix:
         include:
-          - compiler: msvc
+          - cc: msvc
             generator: "Visual Studio 17 2022"
-          - compiler: gcc
+          - cc: gcc
             generator: "Ninja"
     steps:
     - uses: actions/checkout@v4
 
     - name: Configure
       run: |
-        cmake -B build \
-          -G "${{ matrix.generator }}" \
-          -DCMAKE_BUILD_TYPE=Release
+        cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.cc }}
     - name: Build
       run: cmake --build build --config Release
     - name: Test

@@ -93,6 +93,8 @@ jobs:
             generator: "Visual Studio 17 2022"
           - cc: gcc
             generator: "Ninja"
+          - cc: clang
+            generator: "Ninja"
     steps:
     - uses: actions/checkout@v4
 

@@ -46,7 +46,7 @@ static char the_data[] = "Hello World from RTAD!";
 static size_t the_data_size = sizeof(the_data);
 static void test_copy_self_with_data(void **state) {
   char exe_path[1024] = { 0 }; 
-#ifdef _WINDOWS
+#ifdef _WIN32
   char* exe_path_fmt = "%s.exe";
 #else
   char* exe_path_fmt = "%s";
@@ -60,7 +60,7 @@ static void test_copy_self_with_data(void **state) {
 #endif
 
   char subprocess_cmd[1024];
-#ifdef _WINDOWS
+#ifdef _WIN32
   char* prog_path = ".\\%s 1";
 #else
   char* prog_path = "./%s 1";

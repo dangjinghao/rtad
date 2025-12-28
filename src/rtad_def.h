@@ -36,6 +36,12 @@
 #elif defined(__GNUC__) || defined(__clang__)
 #define RTAD_PACKED_STRUCT(decl) decl __attribute__((packed))
 
+#if defined(_WIN32)
+// Windows with GCC or Clang
+// We assume POSIX functions are available (e.g., via MinGW or Cygwin)
+#include <unistd.h>
+#endif
+
 #else
 #warning                                                                       \
     "Define failed: Unknown compiler, packing structure may not work correctly"

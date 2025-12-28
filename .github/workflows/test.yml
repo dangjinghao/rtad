@@ -13,30 +13,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        arch: [x64, arm64]
+        compiler: [gcc, clang]
         include:
           - arch: x64
             os: ubuntu-latest
-            compiler: gcc
-            cc: gcc
-          - arch: x64
-            os: ubuntu-latest
-            compiler: clang
-            cc: clang
           - arch: arm64
             os: ubuntu-24.04-arm
-            compiler: gcc
-            cc: gcc
-          - arch: arm64
-            os: ubuntu-24.04-arm
-            compiler: clang
-            cc: clang
     steps:
     - uses: actions/checkout@v4
 
     - name: Configure
       run: |
         cmake -B build \
-          -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+          -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
           -DCMAKE_BUILD_TYPE=Release
     
     - name: Build
@@ -51,30 +41,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        arch: [x64, arm64]
+        compiler: [gcc-15, clang]
         include:
           - arch: x64
             os: macos-15-intel
-            compiler: gcc
-            cc: gcc-15
-          - arch: x64
-            os: macos-15-intel
-            compiler: clang
-            cc: clang
           - arch: arm64
             os: macos-latest
-            compiler: gcc
-            cc: gcc-15
-          - arch: arm64
-            os: macos-latest
-            compiler: clang
-            cc: clang
     steps:
     - uses: actions/checkout@v4
 
     - name: Configure
       run: |
         cmake -B build \
-          -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+          -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
           -DCMAKE_BUILD_TYPE=Release
     
     - name: Build
@@ -84,25 +64,33 @@ jobs:
       run: ctest --output-on-failure -C Release
 
   windows:
-    name: Windows-x64-${{ matrix.cc }}
-    runs-on: windows-latest
+    name: Windows-${{ matrix.arch }}-${{ matrix.compiler }}
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        arch: [x64, arm64]
+        compiler: [msvc, gcc, clang]
         include:
-          - cc: msvc
+          - arch: x64
+            os: windows-latest
+          - arch: arm64
+            os: windows-11-arm
+          - compiler: gcc
+            generator: Ninja
+          - compiler: clang
+            generator: Ninja
+          - compiler: msvc
             generator: "Visual Studio 17 2022"
-          - cc: gcc
-            generator: "Ninja"
-          - cc: clang
-            generator: "Ninja"
     steps:
     - uses: actions/checkout@v4
 
     - name: Configure
       run: |
-        cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.cc }}
+        cmake -B build -G ${{ matrix.generator }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.compiler }}
+      
     - name: Build
       run: cmake --build build --config Release
+      
     - name: Test
       working-directory: build
       run: ctest --output-on-failure -C Release

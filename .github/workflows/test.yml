@@ -86,7 +86,7 @@ jobs:
 
     - name: Configure
       run: |
-        cmake -B build -G ${{ matrix.generator }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.compiler }}
+        cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.compiler }}
       
     - name: Build
       run: cmake --build build --config Release

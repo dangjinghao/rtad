@@ -1,5 +1,7 @@
 #include "rtad.h"
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 // clang-format off
 #include <setjmp.h> // IWYU pragma: keep
 #include <stdarg.h>

@@ -1,101 +1,96 @@
 #include "rtad_def.h"
-#include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+// clang-format off
+#include <setjmp.h> // IWYU pragma: keep
+#include <stdarg.h>
+#include <cmocka.h>
+// clang-format on
 
-#if defined(_WIN32)
-#include <windows.h>
-#define PATH_MAX MAX_PATH
+#include <sys/stat.h>
 
-#elif defined(__GNUC__) || defined(__clang__)
+#ifndef _MSC_VER
 #include <unistd.h>
-
-#endif
-int test(void) {
-  char pathBuf[PATH_MAX];
-  if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
-    perror("exe_path failed");
-    return 1;
-  }
-  printf("Current exe: %s\n", pathBuf);
-
-  // Define output path
-#if defined(_WIN32)
-  const char *output_path = "rtad_test_out.exe";
-#else
-  const char *output_path = "rtad_test_out";
 #endif
 
-  const char *payload = "Hello from RTAD payload!";
-  size_t payload_len = strlen(payload) + 1; // Include null terminator
+static void test_extract_from_specific_file(void **state) {
+  (void)state; /* unused */
+  // no terminator
+  int result = rtad_copy_self_with_data(__FUNCTION__, "abcdefg", 7);
+  assert_int_equal(result, 0);
+  char *out_data = NULL;
+  size_t out_data_size = 0;
+  rtad_extract_data(__FUNCTION__, &out_data, &out_data_size);
+  assert_non_null(out_data);
+  assert_int_equal(out_data_size, 7);
+  assert_memory_equal(out_data, "abcdefg", 7);
+  rtad_free_extracted_data(out_data);
+}
 
-  printf("Creating %s with payload...\n", output_path);
-  if (rtad_copy_self_with_data(output_path, payload, payload_len) != 0) {
-    fprintf(stderr, "Failed to copy self with data.\n");
+static void test_truncate_data(void **state) {
+  (void)state; /* unused */
+
+  int result = rtad_copy_self_with_data(__FUNCTION__, "hijklmn", 7);
+  assert_int_equal(result, 0);
+  result = rtad_truncate_data(__FUNCTION__);
+  assert_int_equal(result, 0);
+  char *out_data = NULL;
+  size_t out_data_size = 0;
+  rtad_extract_data(__FUNCTION__, &out_data, &out_data_size);
+  assert_null(out_data);
+  assert_int_equal(out_data_size, 0);
+}
+
+static char the_data[] = "Hello World from RTAD!";
+static size_t the_data_size = sizeof(the_data);
+static void test_copy_self_with_data(void **state) {
+  const char *exe_path = __FUNCTION__;
+  rtad_copy_self_with_data(exe_path, the_data, the_data_size);
+
+#ifndef _MSC_VER
+  // Make the copied file executable
+  chmod(exe_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+#endif
+
+  char subprocess_cmd[256];
+  snprintf(subprocess_cmd, sizeof(subprocess_cmd), "./%s 1", exe_path);
+  int result = system(subprocess_cmd);
+  assert_int_equal(result, 0);
+}
+
+static int test_copy_self_with_data_body() {
+  // We should not use aassert_** functions here because this is run as a
+  // subprocess.
+  char *out_data = NULL;
+  size_t out_data_size = 0;
+  int result = rtad_extract_self_data(&out_data, &out_data_size);
+  if (result != 0) {
+    return 1;
+  }
+  if (out_data_size != the_data_size) {
+    rtad_free_extracted_data(out_data);
+    return 1;
+  }
+  if (memcmp(out_data, the_data, the_data_size) != 0) {
+    rtad_free_extracted_data(out_data);
     return 1;
   }
 
-  printf("Verifying payload from %s...\n", output_path);
-  char *read_data = NULL;
-  size_t read_size = 0;
-  if (rtad_extract_data(output_path, &read_data, &read_size) != 0) {
-    fprintf(stderr, "Failed to extract data.\n");
-    // Try to clean up even if extract failed
-    remove(output_path);
+  result = rtad_free_extracted_data(out_data);
+  if (result != 0) {
     return 1;
   }
-
-  printf("Read size: %zu bytes\n", read_size);
-  if (read_size == payload_len &&
-      memcmp(read_data, payload, payload_len) == 0) {
-    printf("SUCCESS: Payload matches: %s\n", read_data);
-  } else {
-    fprintf(stderr, "FAILURE: Payload mismatch!\n");
-  }
-
-  if (read_data) {
-    free(read_data);
-  }
-
-  // Clean up
-  remove(output_path);
-
   return 0;
 }
 
-int main(int argc, char *argv[]) {
-  if (argc < 2) {
-    return test();
+int main(int argc, char **argv) {
+  if (argc > 1) {
+    // test extract_self_data as a subprocess
+    return test_copy_self_with_data_body();
   }
-  const char data[] = "Hello, RTAD!";
 
-  if (strcmp(argv[1], "gen") == 0) {
-// generate a new self with data "Hello, RTAD!" appended
-#if defined(_WIN32)
-    const char *output_path = "rtad_test_out.exe";
-#else
-    const char *output_path = "rtad_test_out";
-#endif
-    size_t data_size = sizeof(data); // Include null terminator
-    if (rtad_copy_self_with_data(output_path, data, data_size) != 0) {
-      fprintf(stderr, "Failed to create self with data.\n");
-      return 1;
-    }
-    printf("Created %s with appended data.\n", output_path);
-  } else if (strcmp(argv[1], "check") == 0) {
-    char *out_data = NULL;
-    size_t out_data_size = 0;
-    if (rtad_extract_self_data(&out_data, &out_data_size) != 0) {
-      fprintf(stderr, "No appended data found in the executable.\n");
-      return 1;
-    }
-    if (strcmp(data, out_data) == 0) {
-      printf("Appended data matches expected: %s\n", out_data);
-    } else {
-      printf("Appended data does not match expected!: %s\n", out_data);
-    }
-    free(out_data);
-  }
-  return 0;
+  const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_extract_from_specific_file),
+      cmocka_unit_test(test_truncate_data),
+      cmocka_unit_test(test_copy_self_with_data),
+  };
+  return cmocka_run_group_tests(tests, NULL, NULL);
 }

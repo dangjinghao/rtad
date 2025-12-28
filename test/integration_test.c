@@ -1,4 +1,5 @@
-#include "rtad_def.h"
+#include "rtad.h"
+#include <stdio.h>
 // clang-format off
 #include <setjmp.h> // IWYU pragma: keep
 #include <stdarg.h>
@@ -42,7 +43,13 @@ static void test_truncate_data(void **state) {
 static char the_data[] = "Hello World from RTAD!";
 static size_t the_data_size = sizeof(the_data);
 static void test_copy_self_with_data(void **state) {
-  const char *exe_path = __FUNCTION__;
+  char exe_path[1024] = { 0 }; 
+#ifdef _WINDOWS
+  char* exe_path_fmt = "%s.exe";
+#else
+  char* exe_path_fmt = "%s";
+#endif
+  snprintf(exe_path,sizeof(exe_path), exe_path_fmt, __FUNCTION__);
   rtad_copy_self_with_data(exe_path, the_data, the_data_size);
 
 #ifndef _MSC_VER
@@ -50,8 +57,13 @@ static void test_copy_self_with_data(void **state) {
   chmod(exe_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
 #endif
 
-  char subprocess_cmd[256];
-  snprintf(subprocess_cmd, sizeof(subprocess_cmd), "./%s 1", exe_path);
+  char subprocess_cmd[1024];
+#ifdef _WINDOWS
+  char* prog_path = ".\\%s 1";
+#else
+  char* prog_path = "./%s 1";
+#endif
+  snprintf(subprocess_cmd, sizeof(subprocess_cmd), prog_path, exe_path);
   int result = system(subprocess_cmd);
   assert_int_equal(result, 0);
 }

@@ -45,6 +45,7 @@ add_executable(rtad_integration_test test/integration_test.c)
 
 target_include_directories(rtad_integration_test PRIVATE ${cmocka_SOURCE_DIR}/include)
 target_include_directories(rtad_integration_test PRIVATE src)
+target_include_directories(rtad_integration_test PRIVATE include)
 # add test macro RTAD_TEST
 target_compile_definitions(rtad_integration_test PRIVATE RTAD_TEST)
 

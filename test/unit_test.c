@@ -417,7 +417,8 @@ static void test_rtad_append_packed_data_ok(void **state) {
   // Seek to the start of appended data
   fseeko(fp, -(ssize_t)(data_size + sizeof(struct rtad_hdr)), SEEK_END);
   char *data_buf = (char *)malloc(data_size);
-  fread(data_buf, 1, data_size, fp);
+  long bytes = fread(data_buf, 1, data_size, fp);
+  assert_int_equal(bytes, data_size);
   assert_memory_equal(data_buf, data, data_size);
   free(data_buf);
   fclose(fp);
@@ -465,7 +466,9 @@ static void test_rtad_copy_self_with_data_ok(void **state) {
   // Seek to the start of appended data
   fseeko(fp, -(ssize_t)(data_size + sizeof(struct rtad_hdr)), SEEK_END);
   char *data_buf = (char *)malloc(data_size);
-  fread(data_buf, 1, data_size, fp);
+  long bytes = fread(data_buf, 1, data_size, fp);
+  assert_int_equal(bytes, data_size);
+
   assert_memory_equal(data_buf, data, data_size);
   free(data_buf);
   fclose(fp);

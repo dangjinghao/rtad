@@ -8,21 +8,46 @@ on:
   workflow_dispatch:
 
 jobs:
-  linux-x64-gcc:
-    name: Linux-x64-gcc
-    runs-on: ubuntu-latest
-    
+  linux:
+    name: Linux-${{ matrix.arch }}-${{ matrix.compiler }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            os: ubuntu-latest
+            compiler: gcc
+            cc: gcc
+            cxx: g++
+          - arch: x64
+            os: ubuntu-latest
+            compiler: clang
+            cc: clang
+            cxx: clang++
+          - arch: arm64
+            os: ubuntu-24.04-arm
+            compiler: gcc
+            cc: gcc
+            cxx: g++
+          - arch: arm64
+            os: ubuntu-24.04-arm
+            compiler: clang
+            cc: clang
+            cxx: clang++
     steps:
     - uses: actions/checkout@v4
     
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake
+        sudo apt-get install -y cmake ${{ matrix.compiler }}
     
     - name: Configure
       run: |
-        cmake -B build -DCMAKE_BUILD_TYPE=Release
+        cmake -B build \
+          -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+          -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+          -DCMAKE_BUILD_TYPE=Release
     
     - name: Build
       run: cmake --build build --config Release

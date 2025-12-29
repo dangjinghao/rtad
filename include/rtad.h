@@ -10,6 +10,13 @@
  */
 int rtad_truncate_data(const char *exe_path);
 /**
+ * @brief Truncate appended data from the executable itself.
+ *
+ * @param new_path
+ * @return int 0 on success, -1 on failure.
+ */
+int rtad_truncate_self_data(const char *new_path);
+/**
  * @brief Copy self executable to dest_path and append data to it.
  *
  * @param dest_path
@@ -51,4 +58,10 @@ int rtad_extract_self_data(char **out_data, size_t *out_data_size);
  * @return int 0 on valid, -1 on invalid.
  */
 int rtad_validate_hdr(const char *exe_path);
+/**
+ * @brief Validate if the executable itself has valid RTAD header.
+ *
+ * @return int 0 on valid, -1 on invalid.
+ */
+int rtad_validate_self_hdr();
 #endif

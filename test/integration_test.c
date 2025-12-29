@@ -1,7 +1,7 @@
 #include "rtad.h"
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 // clang-format off
 #include <setjmp.h> // IWYU pragma: keep
 #include <stdarg.h>
@@ -45,13 +45,13 @@ static void test_truncate_data(void **state) {
 static char the_data[] = "Hello World from RTAD!";
 static size_t the_data_size = sizeof(the_data);
 static void test_copy_self_with_data(void **state) {
-  char exe_path[1024] = { 0 }; 
+  char exe_path[1024] = {0};
 #ifdef _WIN32
-  char* exe_path_fmt = "%s.exe";
+  char *exe_path_fmt = "%s.exe";
 #else
-  char* exe_path_fmt = "%s";
+  char *exe_path_fmt = "%s";
 #endif
-  snprintf(exe_path,sizeof(exe_path), exe_path_fmt, __FUNCTION__);
+  snprintf(exe_path, sizeof(exe_path), exe_path_fmt, __FUNCTION__);
   rtad_copy_self_with_data(exe_path, the_data, the_data_size);
 
 #ifndef _MSC_VER
@@ -61,9 +61,9 @@ static void test_copy_self_with_data(void **state) {
 
   char subprocess_cmd[1024];
 #ifdef _WIN32
-  char* prog_path = ".\\%s 1";
+  char *prog_path = ".\\%s 1";
 #else
-  char* prog_path = "./%s 1";
+  char *prog_path = "./%s 1";
 #endif
   snprintf(subprocess_cmd, sizeof(subprocess_cmd), prog_path, exe_path);
   int result = system(subprocess_cmd);
@@ -75,6 +75,18 @@ static int test_copy_self_with_data_body() {
   // subprocess.
   char *out_data = NULL;
   size_t out_data_size = 0;
+  if (rtad_validate_self_hdr() != 0) {
+    return 1;
+  }
+
+  if (rtad_truncate_self_data("test_rtad_truncate_self_data") != 0) {
+    return 1;
+  }
+
+  if (rtad_validate_hdr("test_rtad_truncate_self_data") == 0) {
+    return 1;
+  }
+
   int result = rtad_extract_self_data(&out_data, &out_data_size);
   if (result != 0) {
     return 1;

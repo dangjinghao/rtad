@@ -321,3 +321,22 @@ int rtad_extract_self_data(char **out_data, size_t *out_data_size) {
   }
   return rtad_extract_data(pathBuf, out_data, out_data_size);
 }
+
+int rtad_validate_self_hdr() {
+  char pathBuf[PATH_MAX];
+  if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
+    return -1;
+  }
+  return rtad_validate_hdr(pathBuf);
+}
+
+int rtad_truncate_self_data(const char *new_path) {
+  char pathBuf[PATH_MAX];
+  if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
+    return -1;
+  }
+  if (file_copy_self(new_path) != 0) {
+    return -1;
+  }
+  return rtad_truncate_data(new_path);
+}

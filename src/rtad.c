@@ -4,11 +4,16 @@
 RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
   if (!buffer || buf_size == 0)
     return -1;
-  DWORD len = GetModuleFileNameA(NULL, buffer, (DWORD)buf_size);
-  if (len == 0 || len >= buf_size) {
-    // Path retrieval failed or buffer too small
-    if (buf_size > 0)
-      buffer[buf_size - 1] = '\0';
+  WCHAR wc_buf[MAX_PATH];
+  DWORD len = GetModuleFileNameW(NULL, wc_buf, (DWORD)MAX_PATH);
+  if (len == 0 || len >= MAX_PATH) {
+    return -1;
+  }
+
+  int result = WideCharToMultiByte(CP_ACP, 0,
+                                   wc_buf, -1, buffer, (int)buf_size,
+                                   NULL, NULL);
+  if (result == 0) {
     return -1;
   }
   return 0;
@@ -19,25 +24,37 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   if (!path || size == 0) {
     return -1;
   }
-  HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+  int wc_len = MultiByteToWideChar(CP_ACP, 0,
+                                     path, -1, NULL, 0);
+  if (wc_len == 0) {
+    return -1;
+  }
+  WCHAR *wc_path = (WCHAR *)malloc(wc_len * sizeof(WCHAR));
+  if (!wc_path) {
+    return -1;
+  }
+  if (MultiByteToWideChar(CP_ACP, 0,
+                          path, -1, wc_path, wc_len) == 0) {
+    free(wc_path);
+    return -1;
+  }
+  HANDLE hFile = CreateFileW(wc_path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
                              FILE_ATTRIBUTE_NORMAL, NULL);
+  free(wc_path);
   if (hFile == INVALID_HANDLE_VALUE) {
-    goto FAIL;
+    return -1;
   }
   LARGE_INTEGER li = {.QuadPart = (LONGLONG)size};
   if (SetFilePointerEx(hFile, li, NULL, FILE_BEGIN) == 0) {
-    goto FAIL;
+    CloseHandle(hFile);
+    return -1;
   }
   if (SetEndOfFile(hFile) == 0) {
-    goto FAIL;
+    CloseHandle(hFile);
+    return -1;
   }
   CloseHandle(hFile);
   return 0;
-FAIL:
-  if (hFile != INVALID_HANDLE_VALUE) {
-    CloseHandle(hFile);
-  }
-  return -1;
 }
 
 // GCC or Clang on Windows

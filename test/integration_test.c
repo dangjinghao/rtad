@@ -71,7 +71,7 @@ static void test_copy_self_with_data(void **state) {
 }
 
 static int test_copy_self_with_data_body() {
-  // We should not use aassert_** functions here because this is run as a
+  // We should not use assert_* functions here because this is run as a
   // subprocess.
   char *out_data = NULL;
   size_t out_data_size = 0;

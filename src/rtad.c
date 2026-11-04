@@ -1,5 +1,30 @@
 #include "rtad_def.h"
 
+const char *rtad_error_string(int code) {
+  switch (code) {
+  case RTAD_OK:
+    return "Success";
+  case RTAD_ERR_INVALID_ARGUMENT:
+    return "Invalid argument";
+  case RTAD_ERR_IO:
+    return "File I/O error";
+  case RTAD_ERR_NO_MEMORY:
+    return "Memory allocation failed";
+  case RTAD_ERR_INVALID_FORMAT:
+    return "Invalid RTAD data format";
+  case RTAD_ERR_NO_DATA:
+    return "No appended RTAD data";
+  case RTAD_ERR_TOO_LARGE:
+    return "Data exceeds UINT32_MAX bytes";
+  case RTAD_ERR_EXE_PATH:
+    return "Executable path lookup or conversion failed";
+  case RTAD_ERR_BUFFER_TOO_SMALL:
+    return "Executable path buffer is too small";
+  default:
+    return "Unknown RTAD error";
+  }
+}
+
 #if defined(_WIN32)
 RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
   if (!buffer || buf_size == 0)
@@ -281,6 +306,19 @@ int rtad_validate_hdr(const char *exe_path) {
   return rtad_extract_hdr(exe_path, &header);
 }
 
+int rtad_get_data_size(const char *exe_path, size_t *out_size) {
+  if (!exe_path || !out_size) {
+    return RTAD_ERR_INVALID_ARGUMENT;
+  }
+  struct rtad_hdr header;
+  int result = rtad_extract_hdr(exe_path, &header);
+  if (result != RTAD_OK) {
+    return result;
+  }
+  *out_size = header.data_size;
+  return RTAD_OK;
+}
+
 int rtad_truncate_data(const char *exe_path) {
   struct rtad_hdr header;
   if (!exe_path) {
@@ -323,6 +361,20 @@ RTAD_PRIVATE int rtad_append_packed_data(const char *dest_path,
   return file_append_data(dest_path, (const char *)&header, sizeof(header));
 }
 
+int rtad_set_data(const char *exe_path, const char *data, size_t data_size) {
+  if (!exe_path || !data || data_size == 0) {
+    return RTAD_ERR_INVALID_ARGUMENT;
+  }
+  if (data_size > UINT32_MAX) {
+    return RTAD_ERR_TOO_LARGE;
+  }
+  int result = rtad_truncate_data(exe_path);
+  if (result != RTAD_OK) {
+    return result;
+  }
+  return rtad_append_packed_data(exe_path, data, data_size);
+}
+
 int rtad_copy_self_with_data(const char *dest_path, const char *append_data,
                              size_t append_data_size) {
   if (!dest_path || !append_data || append_data_size == 0) {
@@ -335,11 +387,7 @@ int rtad_copy_self_with_data(const char *dest_path, const char *append_data,
   if (result != RTAD_OK) {
     return result;
   }
-  result = rtad_truncate_data(dest_path);
-  if (result != RTAD_OK) {
-    return result;
-  }
-  return rtad_append_packed_data(dest_path, append_data, append_data_size);
+  return rtad_set_data(dest_path, append_data, append_data_size);
 }
 
 int rtad_extract_data(const char *exe_path, char **out_data,

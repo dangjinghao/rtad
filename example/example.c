@@ -13,7 +13,8 @@ int main(int argc, char *argv[]) {
       if (argc == 2) {
         result = rtad_truncate_self_data(argv[1]);
         if (result != RTAD_OK) {
-          fprintf(stderr, "Failed to truncate self data (error %d).\n", result);
+          fprintf(stderr, "Failed to truncate self data: %s.\n",
+                  rtad_error_string(result));
           return EXIT_FAILURE;
         }
         printf("Truncated self data successfully at %s.\n", argv[1]);
@@ -24,7 +25,8 @@ int main(int argc, char *argv[]) {
       printf("  %s <path_to_truncated_exe>\n", argv[0]);
       printf("  %s <new_exe_path> <data_to_append>\n", argv[0]);
     } else {
-      fprintf(stderr, "Failed to extract self data (error %d).\n", result);
+      fprintf(stderr, "Failed to extract self data: %s.\n",
+              rtad_error_string(result));
       return EXIT_FAILURE;
     }
   } else {
@@ -36,7 +38,8 @@ int main(int argc, char *argv[]) {
     if (result == RTAD_OK) {
       printf("Created new executable with appended data: %s\n", new_exe_path);
     } else {
-      fprintf(stderr, "Failed to create new executable (error %d).\n", result);
+      fprintf(stderr, "Failed to create new executable: %s.\n",
+              rtad_error_string(result));
       return EXIT_FAILURE;
     }
   }

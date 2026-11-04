@@ -2,7 +2,7 @@
 #define __RTAD_H__
 #include <stddef.h>
 
-/** All API functions return RTAD_OK on success or a negative rtad_error. */
+/** Status-returning API functions use RTAD_OK or a negative rtad_error. */
 typedef enum {
   RTAD_OK = 0,
   /** NULL pointer, zero data size, or unsupported path buffer size. */
@@ -22,6 +22,38 @@ typedef enum {
   /** Executable path does not fit the buffer. */
   RTAD_ERR_BUFFER_TOO_SMALL = -8
 } rtad_error;
+
+/**
+ * @brief Return a human-readable English description of a status code.
+ * Returns a static string that must not be modified or freed.
+ * Unknown codes return "Unknown RTAD error". No allocation is performed.
+ */
+const char *rtad_error_string(int code);
+
+/**
+ * @brief Set appended data on an existing file.
+ * Validates arguments and the existing trailer before modifying the file.
+ * Removes an existing valid data block and trailer, then appends the new data.
+ * A file without a trailer is appended to; a malformed trailer is rejected.
+ * The operation is not atomic: a write failure can leave the old data removed
+ * or the new data incomplete. The caller must prevent concurrent modification.
+ *
+ * @param exe_path Path to an existing file; missing files are not created.
+ * @param data Non-NULL data buffer, which may contain arbitrary binary data.
+ * @param data_size Number of bytes, from 1 through UINT32_MAX.
+ * @return RTAD_OK on success, a negative rtad_error on failure.
+ */
+int rtad_set_data(const char *exe_path, const char *data, size_t data_size);
+
+/**
+ * @brief Query the appended data size without allocating or reading the
+ * payload. Validates the trailer. On failure, out_size is left unchanged.
+ *
+ * @param exe_path File to inspect.
+ * @param out_size Receives the payload size on success; must not be NULL.
+ * @return RTAD_OK on success, RTAD_ERR_NO_DATA if absent, or another error.
+ */
+int rtad_get_data_size(const char *exe_path, size_t *out_size);
 
 /**
  * @brief Truncate appended data from a file.

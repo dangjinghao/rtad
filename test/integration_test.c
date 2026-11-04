@@ -102,7 +102,11 @@ static void test_copy_self_with_data(void **state) {
   char *exe_path_fmt = "%s";
 #endif
   snprintf(exe_path, sizeof(exe_path), exe_path_fmt, __FUNCTION__);
-  rtad_copy_self_with_data(exe_path, the_data, the_data_size);
+  assert_int_equal(rtad_copy_self_with_data(exe_path, "old", 3), RTAD_OK);
+  assert_int_equal(rtad_set_data(exe_path, the_data, the_data_size), RTAD_OK);
+  size_t stored_size = 0;
+  assert_int_equal(rtad_get_data_size(exe_path, &stored_size), RTAD_OK);
+  assert_int_equal(stored_size, the_data_size);
 
 #ifndef _MSC_VER
   // Make the copied file executable

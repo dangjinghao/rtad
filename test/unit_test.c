@@ -620,7 +620,20 @@ static void test_invalid_format_errors(void **state) {
     assert_int_equal(rtad_extract_data(__FUNCTION__, &data, &size),
                      RTAD_ERR_INVALID_FORMAT);
     assert_int_equal(rtad_truncate_data(__FUNCTION__), RTAD_ERR_INVALID_FORMAT);
+    size = 123;
+    assert_int_equal(rtad_get_data_size(__FUNCTION__, &size),
+                     RTAD_ERR_INVALID_FORMAT);
+    assert_int_equal(size, 123);
+    assert_int_equal(rtad_set_data(__FUNCTION__, "new", 3),
+                     RTAD_ERR_INVALID_FORMAT);
     assert_int_equal(file_length(__FUNCTION__), sizeof(hdr));
+    fp = fopen(__FUNCTION__, "rb");
+    assert_non_null(fp);
+    struct rtad_hdr unchanged;
+    assert_int_equal(fread(&unchanged, 1, sizeof(unchanged), fp),
+                     sizeof(unchanged));
+    assert_memory_equal(&unchanged, &hdr, sizeof(hdr));
+    assert_int_equal(fclose(fp), 0);
     assert_null(data);
   }
 }
@@ -642,8 +655,111 @@ static void test_copy_oversize_preserves_destination(void **state) {
 #endif
 }
 
+static void test_set_data_replaces_existing_block(void **state) {
+  (void)state;
+  __create_tmp_file(__FUNCTION__);
+  const char payload[] = {'a', '\0', 'b', '\xff', 'c'};
+  const size_t lengths[] = {3, 1, sizeof(payload), sizeof(payload)};
+  for (size_t i = 0; i < sizeof(lengths) / sizeof(lengths[0]); i++) {
+    assert_int_equal(rtad_set_data(__FUNCTION__, payload, lengths[i]), RTAD_OK);
+    assert_int_equal(file_length(__FUNCTION__),
+                     TMP_FILE_SIZE + lengths[i] + RTAD_HDR_SIZE);
+    size_t size = 0;
+    assert_int_equal(rtad_get_data_size(__FUNCTION__, &size), RTAD_OK);
+    assert_int_equal(size, lengths[i]);
+    char *data = NULL;
+    assert_int_equal(rtad_extract_data(__FUNCTION__, &data, &size), RTAD_OK);
+    assert_int_equal(size, lengths[i]);
+    assert_memory_equal(data, payload, size);
+    rtad_free_extracted_data(data);
+  }
+  // A single truncation must recover the original file, not an older payload.
+  assert_int_equal(rtad_truncate_data(__FUNCTION__), RTAD_OK);
+  assert_int_equal(file_length(__FUNCTION__), TMP_FILE_SIZE);
+  FILE *fp = fopen(__FUNCTION__, "rb");
+  assert_non_null(fp);
+  for (size_t i = 0; i < TMP_FILE_SIZE; i++) {
+    assert_int_equal(fgetc(fp), (unsigned char)i);
+  }
+  assert_int_equal(fclose(fp), 0);
+}
+
+static void test_set_data_invalid_arguments_preserve_file(void **state) {
+  (void)state;
+  __create_tmp_file_append_data_hdr(__FUNCTION__, 10);
+  const char *snapshot = "test_set_data_original";
+  assert_int_equal(file_copy(__FUNCTION__, snapshot), RTAD_OK);
+  assert_int_equal(rtad_set_data(NULL, "x", 1), RTAD_ERR_INVALID_ARGUMENT);
+  assert_int_equal(rtad_set_data(__FUNCTION__, NULL, 1),
+                   RTAD_ERR_INVALID_ARGUMENT);
+  assert_int_equal(rtad_set_data(__FUNCTION__, "x", 0),
+                   RTAD_ERR_INVALID_ARGUMENT);
+#if SIZE_MAX > UINT32_MAX
+  assert_int_equal(rtad_set_data(__FUNCTION__, "x", (size_t)UINT32_MAX + 1),
+                   RTAD_ERR_TOO_LARGE);
+#endif
+  assert_int_equal(__file_content_cmp(__FUNCTION__, snapshot), 0);
+  assert_int_equal(rtad_set_data("non_existing_file", "x", 1), RTAD_ERR_IO);
+  assert_int_equal(file_length("non_existing_file"), RTAD_ERR_IO);
+  assert_int_equal(rtad_set_data(".", "x", 1), RTAD_ERR_IO);
+}
+
+static void test_get_data_size_errors(void **state) {
+  (void)state;
+  size_t size = 123;
+  assert_int_equal(rtad_get_data_size(NULL, &size), RTAD_ERR_INVALID_ARGUMENT);
+  assert_int_equal(size, 123);
+  assert_int_equal(rtad_get_data_size(__FUNCTION__, NULL),
+                   RTAD_ERR_INVALID_ARGUMENT);
+  assert_int_equal(rtad_get_data_size("non_existing_file", &size), RTAD_ERR_IO);
+  assert_int_equal(size, 123);
+  __create_tmp_file(__FUNCTION__);
+  assert_int_equal(rtad_get_data_size(__FUNCTION__, &size), RTAD_ERR_NO_DATA);
+  assert_int_equal(size, 123);
+  FILE *fp = fopen(__FUNCTION__, "wb");
+  assert_non_null(fp);
+  assert_int_equal(fclose(fp), 0);
+  assert_int_equal(rtad_get_data_size(__FUNCTION__, &size), RTAD_ERR_NO_DATA);
+  assert_int_equal(size, 123);
+  // Empty existing files are supported; replacing their data truncates to zero.
+  assert_int_equal(rtad_set_data(__FUNCTION__, "first", 5), RTAD_OK);
+  assert_int_equal(rtad_set_data(__FUNCTION__, "x", 1), RTAD_OK);
+  assert_int_equal(rtad_get_data_size(__FUNCTION__, &size), RTAD_OK);
+  assert_int_equal(size, 1);
+  assert_int_equal(file_length(__FUNCTION__), RTAD_HDR_SIZE + 1);
+}
+
+static void test_error_string(void **state) {
+  (void)state;
+  const int codes[] = {RTAD_OK,
+                       RTAD_ERR_INVALID_ARGUMENT,
+                       RTAD_ERR_IO,
+                       RTAD_ERR_NO_MEMORY,
+                       RTAD_ERR_INVALID_FORMAT,
+                       RTAD_ERR_NO_DATA,
+                       RTAD_ERR_TOO_LARGE,
+                       RTAD_ERR_EXE_PATH,
+                       RTAD_ERR_BUFFER_TOO_SMALL};
+  for (size_t i = 0; i < sizeof(codes) / sizeof(codes[0]); i++) {
+    const char *message = rtad_error_string(codes[i]);
+    assert_non_null(message);
+    assert_true(strlen(message) > 0);
+    assert_string_not_equal(message, "Unknown RTAD error");
+    for (size_t j = 0; j < i; j++) {
+      assert_string_not_equal(message, rtad_error_string(codes[j]));
+    }
+  }
+  assert_string_equal(rtad_error_string(RTAD_OK), "Success");
+  assert_string_equal(rtad_error_string(123), "Unknown RTAD error");
+  assert_string_equal(rtad_error_string(-999), "Unknown RTAD error");
+}
+
 int main(void) {
   const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_set_data_replaces_existing_block),
+      cmocka_unit_test(test_set_data_invalid_arguments_preserve_file),
+      cmocka_unit_test(test_get_data_size_errors),
+      cmocka_unit_test(test_error_string),
       cmocka_unit_test(test_public_error_codes),
       cmocka_unit_test(test_invalid_format_errors),
       cmocka_unit_test(test_copy_oversize_preserves_destination),

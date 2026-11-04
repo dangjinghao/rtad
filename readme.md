@@ -14,8 +14,10 @@ A cross-platform library for appending data to executable files and reading it b
 
 ## Error handling
 
-Public functions still return `int`: `RTAD_OK` (0) means success, and negative
-values are the `rtad_error` constants declared in `include/rtad.h`.
+Status-returning public functions return `int`: `RTAD_OK` (0) means success, and
+negative values are the `rtad_error` constants declared in `include/rtad.h`.
+`rtad_error_string(code)` returns a static English description for logging. Do
+not free or modify it; unknown codes return `"Unknown RTAD error"`.
 
 | Code | Meaning |
 | --- | --- |
@@ -49,6 +51,25 @@ if (result == RTAD_ERR_NO_DATA) {
 ```
 
 ## Usage
+
+To add or replace data on an existing file, use `rtad_set_data(path, data, size)`.
+It checks the existing trailer, removes a valid old data block and trailer, then
+appends the new data and trailer. Repeated calls replace the payload rather than
+stacking data blocks. Missing files, malformed trailers, invalid arguments and
+oversized payloads are rejected before modification. The operation is in-place:
+if writing fails after truncation, the old payload is not restored. Prevent
+concurrent changes to the file while calling this API.
+
+`rtad_get_data_size(path, &size)` validates the trailer and returns the payload
+size without reading or allocating the payload. It returns `RTAD_ERR_NO_DATA`
+when no trailer exists and leaves `size` unchanged on any error.
+
+```c
+int result = rtad_set_data("application", "hello", 5);
+if (result != RTAD_OK) {
+    fprintf(stderr, "%s\n", rtad_error_string(result));
+}
+```
 
 For some special reasons, I have to code a binary executable program, but I need to pack some data files together with it. RTAD can help me achieve this goal easily.
 

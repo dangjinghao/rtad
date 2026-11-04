@@ -182,6 +182,41 @@ static void test_file_copy_self_ok(void **state) {
   assert_int_equal(__file_content_cmp(exe_path_buffer, dest_path), 0);
 }
 
+#if defined(__linux__)
+// /dev/full accepts opens but fails writes, including buffered writes on close.
+static void test_file_copy_write_failure(void **state) {
+  (void)state;
+  __create_tmp_file(__FUNCTION__);
+  assert_int_equal(file_copy(__FUNCTION__, "/dev/full"), -1);
+}
+
+static void test_file_copy_flush_failure(void **state) {
+  (void)state;
+  FILE *fp = fopen(__FUNCTION__, "wb");
+  assert_non_null(fp);
+  assert_int_equal(fputc('x', fp), 'x');
+  assert_int_equal(fclose(fp), 0);
+  assert_int_equal(file_copy(__FUNCTION__, "/dev/full"), -1);
+}
+
+static void test_file_copy_read_failure(void **state) {
+  (void)state;
+  // On Linux, opening a directory succeeds but reading it fails.
+  assert_int_equal(file_copy(".", __FUNCTION__), -1);
+}
+
+static void test_file_append_write_failure(void **state) {
+  (void)state;
+  char data[BUFFER_SIZE * 4] = {0};
+  assert_int_equal(file_append_data("/dev/full", data, sizeof(data)), -1);
+}
+
+static void test_file_append_flush_failure(void **state) {
+  (void)state;
+  assert_int_equal(file_append_data("/dev/full", "x", 1), -1);
+}
+#endif
+
 static void test_file_copy_self_null_dest(void **state) {
   (void)state; /* unused */
   int result = file_copy_self(NULL);
@@ -566,6 +601,13 @@ int main(void) {
       cmocka_unit_test(test_file_copy_wrong_src_path),
       cmocka_unit_test(test_file_copy_cannot_create_dest),
       cmocka_unit_test(test_file_copy_self_ok),
+#if defined(__linux__)
+      cmocka_unit_test(test_file_copy_write_failure),
+      cmocka_unit_test(test_file_copy_flush_failure),
+      cmocka_unit_test(test_file_copy_read_failure),
+      cmocka_unit_test(test_file_append_write_failure),
+      cmocka_unit_test(test_file_append_flush_failure),
+#endif
       cmocka_unit_test(test_file_append_data_20_bytes),
       cmocka_unit_test(test_file_append_data_1_byte),
       cmocka_unit_test(test_file_append_data_null_path),

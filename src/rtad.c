@@ -10,8 +10,7 @@ RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
     return -1;
   }
 
-  int result = WideCharToMultiByte(CP_ACP, 0,
-                                   wc_buf, -1, buffer, (int)buf_size,
+  int result = WideCharToMultiByte(CP_ACP, 0, wc_buf, -1, buffer, (int)buf_size,
                                    NULL, NULL);
   if (result == 0) {
     return -1;
@@ -24,8 +23,7 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   if (!path || size == 0) {
     return -1;
   }
-  int wc_len = MultiByteToWideChar(CP_ACP, 0,
-                                     path, -1, NULL, 0);
+  int wc_len = MultiByteToWideChar(CP_ACP, 0, path, -1, NULL, 0);
   if (wc_len == 0) {
     return -1;
   }
@@ -33,8 +31,7 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   if (!wc_path) {
     return -1;
   }
-  if (MultiByteToWideChar(CP_ACP, 0,
-                          path, -1, wc_path, wc_len) == 0) {
+  if (MultiByteToWideChar(CP_ACP, 0, path, -1, wc_path, wc_len) == 0) {
     free(wc_path);
     return -1;
   }
@@ -151,12 +148,24 @@ RTAD_PRIVATE int file_copy(const char *src_path, const char *dest_path) {
   }
   char copy_buf[BUFFER_SIZE];
   size_t bytes;
+  int result = 0;
   while ((bytes = fread(copy_buf, 1, sizeof(copy_buf), src_fp)) > 0) {
-    fwrite(copy_buf, 1, bytes, dest_fp);
+    if (fwrite(copy_buf, 1, bytes, dest_fp) != bytes) {
+      result = -1;
+      break;
+    }
   }
-  fclose(src_fp);
-  fclose(dest_fp);
-  return 0;
+  if (ferror(src_fp) || ferror(dest_fp)) {
+    result = -1;
+  }
+  if (fclose(src_fp) != 0) {
+    result = -1;
+  }
+  // Buffered writes can fail only when the destination is closed.
+  if (fclose(dest_fp) != 0) {
+    result = -1;
+  }
+  return result;
 }
 
 RTAD_PRIVATE int file_copy_self(const char *dest_path) {
@@ -180,12 +189,14 @@ RTAD_PRIVATE int file_append_data(const char *path, const char *data,
     return -1;
   }
   size_t written = fwrite(data, 1, data_size, fp);
-  if (written != data_size) {
-    fclose(fp);
-    return -1;
+  int result = 0;
+  if (written != data_size || ferror(fp)) {
+    result = -1;
   }
-  fclose(fp);
-  return 0;
+  if (fclose(fp) != 0) {
+    result = -1;
+  }
+  return result;
 }
 
 int rtad_extract_hdr(const char *exe_path, struct rtad_hdr *header) {

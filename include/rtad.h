@@ -11,6 +11,7 @@
 int rtad_truncate_data(const char *exe_path);
 /**
  * @brief Truncate appended data from the executable itself.
+ * On failure, new_path may contain an incomplete copy.
  *
  * @param new_path
  * @return int 0 on success, -1 on failure.
@@ -18,6 +19,7 @@ int rtad_truncate_data(const char *exe_path);
 int rtad_truncate_self_data(const char *new_path);
 /**
  * @brief Copy self executable to dest_path and append data to it.
+ * On failure, dest_path may contain an incomplete file.
  *
  * @param dest_path
  * @param append_data

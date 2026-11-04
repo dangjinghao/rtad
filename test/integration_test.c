@@ -10,6 +10,12 @@
 
 #include <sys/stat.h>
 
+#if defined(__linux__)
+#include <signal.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
+#endif
+
 #ifndef _MSC_VER
 #include <unistd.h>
 #endif
@@ -44,6 +50,45 @@ static void test_truncate_data(void **state) {
 
 static char the_data[] = "Hello World from RTAD!";
 static size_t the_data_size = sizeof(the_data);
+#if defined(__linux__)
+static void test_copy_self_with_data_write_failure(void **state) {
+  (void)state;
+  struct stat self_stat;
+  assert_int_equal(stat("/proc/self/exe", &self_stat), 0);
+  // Fail during executable copy, payload flush, and trailer flush respectively.
+  const rlim_t limits[] = {1, (rlim_t)self_stat.st_size,
+                           (rlim_t)self_stat.st_size + the_data_size};
+  for (size_t i = 0; i < sizeof(limits) / sizeof(limits[0]); i++) {
+    char dest[] = "test_write_failure_XXXXXX";
+    int fd = mkstemp(dest);
+    assert_true(fd >= 0);
+    close(fd);
+    pid_t pid = fork();
+    assert_true(pid >= 0);
+    if (pid == 0) {
+      // Isolate the resource limit and signal handler from the test runner.
+      struct rlimit limit;
+      if (signal(SIGXFSZ, SIG_IGN) == SIG_ERR ||
+          getrlimit(RLIMIT_FSIZE, &limit) != 0) {
+        _exit(2);
+      }
+      limit.rlim_cur = limits[i];
+      if (setrlimit(RLIMIT_FSIZE, &limit) != 0) {
+        _exit(2);
+      }
+      _exit(rtad_copy_self_with_data(dest, the_data, the_data_size) == -1 ? 0
+                                                                          : 1);
+    }
+    int status;
+    pid_t waited = waitpid(pid, &status, 0);
+    remove(dest);
+    assert_int_equal(waited, pid);
+    assert_true(WIFEXITED(status));
+    assert_int_equal(WEXITSTATUS(status), 0);
+  }
+}
+#endif
+
 static void test_copy_self_with_data(void **state) {
   char exe_path[1024] = {0};
 #ifdef _WIN32
@@ -117,6 +162,9 @@ int main(int argc, char **argv) {
       cmocka_unit_test(test_extract_from_specific_file),
       cmocka_unit_test(test_truncate_data),
       cmocka_unit_test(test_copy_self_with_data),
+#if defined(__linux__)
+      cmocka_unit_test(test_copy_self_with_data_write_failure),
+#endif
   };
   return cmocka_run_group_tests(tests, NULL, NULL);
 }

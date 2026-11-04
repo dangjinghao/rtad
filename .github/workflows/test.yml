@@ -97,10 +97,6 @@ jobs:
           - compiler: msvc
             generator: "Visual Studio 18 2026"
 
-          # Patch: see https://github.com/actions/runner-images/issues/14225
-          - arch: arm64
-            compiler: msvc
-            generator: "Visual Studio 17 2022"
     steps:
     - uses: actions/checkout@v4
 

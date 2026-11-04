@@ -20,7 +20,9 @@ typedef enum {
   /** Executable path lookup/conversion failed. */
   RTAD_ERR_EXE_PATH = -7,
   /** Executable path does not fit the buffer. */
-  RTAD_ERR_BUFFER_TOO_SMALL = -8
+  RTAD_ERR_BUFFER_TOO_SMALL = -8,
+  /** Operation is not supported on this platform. */
+  RTAD_ERR_NOT_SUPPORTED = -9
 } rtad_error;
 
 /**
@@ -44,6 +46,26 @@ const char *rtad_error_string(int code);
  * @return RTAD_OK on success, a negative rtad_error on failure.
  */
 int rtad_set_data(const char *exe_path, const char *data, size_t data_size);
+
+/**
+ * @brief Replace the executable at this process's path with updated RTAD data.
+ * On Linux/macOS, creates a temporary file in the same directory, replaces any
+ * existing RTAD payload in that copy, then renames it over the executable.
+ * Preserves owner, group and permission bits; ACLs and extended attributes are
+ * not copied. Errors before rename leave the original executable unchanged.
+ * The file is synced before rename, but directory crash durability is not
+ * guaranteed. Windows returns RTAD_ERR_NOT_SUPPORTED for valid arguments.
+ *
+ * The caller must **prevent ** updates to the executable and its path.
+ * After success, exit promptly and restart to use the new file. Do not call
+ * this API again or rely on other self APIs in the old process after success.
+ * On macOS, this does not repair or guarantee validity of code signatures.
+ *
+ * @param data Non-NULL replacement payload.
+ * @param data_size Number of bytes, from 1 through UINT32_MAX.
+ * @return RTAD_OK on success, a negative rtad_error on failure.
+ */
+int rtad_set_self_data(const char *data, size_t data_size);
 
 /**
  * @brief Query the appended data size without allocating or reading the

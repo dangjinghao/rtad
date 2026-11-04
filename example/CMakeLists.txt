@@ -9,3 +9,7 @@ add_executable(rtad_example example.c)
 
 # Link to rtad library
 target_link_libraries(rtad_example PRIVATE rtad)
+
+# Update the executable itself, then read the data on the next launch.
+add_executable(rtad_example2 example2.c)
+target_link_libraries(rtad_example2 PRIVATE rtad)

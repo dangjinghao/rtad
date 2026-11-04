@@ -739,7 +739,8 @@ static void test_error_string(void **state) {
                        RTAD_ERR_NO_DATA,
                        RTAD_ERR_TOO_LARGE,
                        RTAD_ERR_EXE_PATH,
-                       RTAD_ERR_BUFFER_TOO_SMALL};
+                       RTAD_ERR_BUFFER_TOO_SMALL,
+                       RTAD_ERR_NOT_SUPPORTED};
   for (size_t i = 0; i < sizeof(codes) / sizeof(codes[0]); i++) {
     const char *message = rtad_error_string(codes[i]);
     assert_non_null(message);

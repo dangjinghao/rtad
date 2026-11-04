@@ -1,5 +1,9 @@
 #include "rtad_def.h"
 
+#if defined(__linux__) || defined(__APPLE__)
+#include <sys/stat.h>
+#endif
+
 const char *rtad_error_string(int code) {
   switch (code) {
   case RTAD_OK:
@@ -20,6 +24,8 @@ const char *rtad_error_string(int code) {
     return "Executable path lookup or conversion failed";
   case RTAD_ERR_BUFFER_TOO_SMALL:
     return "Executable path buffer is too small";
+  case RTAD_ERR_NOT_SUPPORTED:
+    return "Operation is not supported on this platform";
   default:
     return "Unknown RTAD error";
   }
@@ -373,6 +379,107 @@ int rtad_set_data(const char *exe_path, const char *data, size_t data_size) {
     return result;
   }
   return rtad_append_packed_data(exe_path, data, data_size);
+}
+
+int rtad_set_self_data(const char *data, size_t data_size) {
+  if (!data || data_size == 0) {
+    return RTAD_ERR_INVALID_ARGUMENT;
+  }
+  if (data_size > UINT32_MAX) {
+    return RTAD_ERR_TOO_LARGE;
+  }
+#if defined(_WIN32)
+  return RTAD_ERR_NOT_SUPPORTED;
+#else
+  char path_buf[PATH_MAX];
+  int result = exe_path(path_buf, sizeof(path_buf));
+  if (result != RTAD_OK) {
+    return result;
+  }
+  // Resolve symlinks and relative paths before creating a sibling temp file.
+  char *path = realpath(path_buf, NULL);
+  if (!path) {
+    return RTAD_ERR_EXE_PATH;
+  }
+  int fd = -1;
+  char *temp = NULL;
+  int temp_created = 0;
+  struct stat original;
+  struct stat temporary;
+  result = RTAD_ERR_IO;
+  if (stat(path, &original) != 0 || !S_ISREG(original.st_mode)) {
+    goto cleanup;
+  }
+
+  const char suffix[] = ".rtad-XXXXXX";
+  size_t dir_size = (size_t)(strrchr(path, '/') - path) + 1;
+  temp = malloc(dir_size + sizeof(suffix));
+  if (!temp) {
+    result = RTAD_ERR_NO_MEMORY;
+    goto cleanup;
+  }
+  memcpy(temp, path, dir_size);
+  memcpy(temp + dir_size, suffix, sizeof(suffix));
+  result = RTAD_ERR_IO;
+  fd = mkstemp(temp);
+  if (fd < 0) {
+    goto cleanup;
+  }
+  temp_created = 1;
+  result = rtad_truncate_self_data(temp);
+  if (result != RTAD_OK) {
+    goto cleanup;
+  }
+  result = rtad_set_data(temp, data, data_size);
+  if (result != RTAD_OK) {
+    goto cleanup;
+  }
+  // The path-based helpers close their streams before we sync this file.
+  result = RTAD_ERR_IO;
+  if (fstat(fd, &temporary) != 0) {
+    goto cleanup;
+  }
+  if ((temporary.st_uid != original.st_uid ||
+       temporary.st_gid != original.st_gid) &&
+      fchown(fd, original.st_uid, original.st_gid) != 0) {
+    goto cleanup;
+  }
+  // Apply mode after writing and ownership changes, which can clear mode bits.
+  if (fchmod(fd, original.st_mode & 07777) != 0 || fsync(fd) != 0) {
+    goto cleanup;
+  }
+  int close_result = close(fd);
+  fd = -1;
+  if (close_result != 0) {
+    goto cleanup;
+  }
+  size_t stored_size = 0;
+  result = rtad_get_data_size(temp, &stored_size);
+  if (result != RTAD_OK) {
+    goto cleanup;
+  }
+  if (stored_size != data_size) {
+    result = RTAD_ERR_INVALID_FORMAT;
+    goto cleanup;
+  }
+  result = RTAD_ERR_IO;
+  if (rename(temp, path) != 0) {
+    goto cleanup;
+  }
+  temp_created = 0;
+  result = RTAD_OK;
+
+cleanup:
+  if (fd >= 0) {
+    close(fd);
+  }
+  if (temp_created) {
+    unlink(temp);
+  }
+  free(temp);
+  free(path);
+  return result;
+#endif
 }
 
 int rtad_copy_self_with_data(const char *dest_path, const char *append_data,

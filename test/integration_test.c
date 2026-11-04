@@ -10,6 +10,10 @@
 
 #include <sys/stat.h>
 
+#if !defined(_WIN32)
+#include <sys/wait.h>
+#endif
+
 #if defined(__linux__)
 #include <signal.h>
 #include <sys/resource.h>
@@ -124,6 +128,132 @@ static void test_copy_self_with_data(void **state) {
   assert_int_equal(result, 0);
 }
 
+static void test_self_update_arguments(void **state) {
+  (void)state;
+  assert_int_equal(rtad_set_self_data(NULL, 1), RTAD_ERR_INVALID_ARGUMENT);
+  assert_int_equal(rtad_set_self_data("x", 0), RTAD_ERR_INVALID_ARGUMENT);
+  // These platforms have 64-bit size_t in the supported test matrix.
+  if (sizeof(size_t) > 4) {
+    assert_int_equal(rtad_set_self_data("x", (size_t)0xffffffffU + 1),
+                     RTAD_ERR_TOO_LARGE);
+  }
+#if defined(_WIN32)
+  assert_int_equal(rtad_set_self_data("x", 1), RTAD_ERR_NOT_SUPPORTED);
+#endif
+}
+
+#if !defined(_WIN32)
+static int run_self_update_child(const char *path, const char *mode) {
+  pid_t pid = fork();
+  if (pid < 0) {
+    return -1;
+  }
+  if (pid == 0) {
+    execl(path, path, mode, (char *)NULL);
+    _exit(127);
+  }
+  int status;
+  if (waitpid(pid, &status, 0) != pid || !WIFEXITED(status)) {
+    return -1;
+  }
+  return WEXITSTATUS(status);
+}
+
+static int self_update_child(const char *mode) {
+  size_t size = the_data_size;
+  if (strcmp(mode, "--update-short") == 0 ||
+      strcmp(mode, "--verify-short") == 0) {
+    size = 1;
+  }
+  if (strncmp(mode, "--verify-", 9) == 0) {
+    char *data = NULL;
+    size_t actual = 0;
+    int result = rtad_extract_self_data(&data, &actual);
+    if (result != RTAD_OK) {
+      return 1;
+    }
+    int matches = actual == size && memcmp(data, the_data, size) == 0;
+    rtad_free_extracted_data(data);
+    return !matches;
+  }
+#if defined(__linux__)
+  if (strcmp(mode, "--update-fail-write") == 0) {
+    struct rlimit limit;
+    if (signal(SIGXFSZ, SIG_IGN) == SIG_ERR ||
+        getrlimit(RLIMIT_FSIZE, &limit) != 0) {
+      return 2;
+    }
+    limit.rlim_cur = 1;
+    if (setrlimit(RLIMIT_FSIZE, &limit) != 0) {
+      return 2;
+    }
+    return rtad_set_self_data(the_data, size) != RTAD_ERR_IO;
+  }
+#endif
+  int result = rtad_set_self_data(the_data, size);
+  if (strcmp(mode, "--update-fail-open") == 0) {
+    return result != RTAD_ERR_IO;
+  }
+  // The caller exits immediately; all verification happens in a new process.
+  return result != RTAD_OK;
+}
+
+static void test_self_update_restarts(void **state) {
+  (void)state;
+  char dir[] = "self update XXXXXX";
+  assert_non_null(mkdtemp(dir));
+  char path[256], link[256];
+  snprintf(path, sizeof(path), "%s/program", dir);
+  snprintf(link, sizeof(link), "%s/alias", dir);
+  assert_int_equal(rtad_truncate_self_data(path), RTAD_OK);
+  assert_int_equal(chmod(path, 0751), 0);
+  assert_int_equal(symlink("program", link), 0);
+  struct stat original, first, second, third, alias;
+  assert_int_equal(stat(path, &original), 0);
+  // Start with a bare executable and launch via a symlink in a path with
+  // spaces.
+  assert_int_equal(run_self_update_child(link, "--update-long"), 0);
+  assert_int_equal(stat(path, &first), 0);
+  assert_true(first.st_ino != original.st_ino);
+  assert_int_equal(first.st_mode & 07777, original.st_mode & 07777);
+  assert_int_equal(first.st_uid, original.st_uid);
+  assert_int_equal(first.st_gid, original.st_gid);
+  assert_int_equal(lstat(link, &alias), 0);
+  assert_true(S_ISLNK(alias.st_mode));
+  assert_int_equal(run_self_update_child(path, "--verify-long"), 0);
+  assert_int_equal(run_self_update_child(path, "--update-short"), 0);
+  assert_int_equal(stat(path, &second), 0);
+  assert_int_equal(first.st_size - second.st_size, the_data_size - 1);
+  assert_int_equal(run_self_update_child(path, "--verify-short"), 0);
+  assert_int_equal(run_self_update_child(path, "--update-long"), 0);
+  assert_int_equal(stat(path, &third), 0);
+  assert_int_equal(first.st_size, third.st_size);
+  assert_int_equal(run_self_update_child(path, "--verify-long"), 0);
+
+#if defined(__linux__)
+  // Failure during temporary-file writing must preserve the executable.
+  assert_int_equal(run_self_update_child(path, "--update-fail-write"), 0);
+  assert_int_equal(stat(path, &second), 0);
+  assert_int_equal(second.st_ino, third.st_ino);
+  assert_int_equal(second.st_size, third.st_size);
+  assert_int_equal(run_self_update_child(path, "--verify-long"), 0);
+#endif
+  if (geteuid() != 0) {
+    assert_int_equal(chmod(dir, 0555), 0);
+    int result = run_self_update_child(path, "--update-fail-open");
+    assert_int_equal(chmod(dir, 0700), 0);
+    assert_int_equal(result, 0);
+    assert_int_equal(stat(path, &second), 0);
+    assert_int_equal(second.st_ino, third.st_ino);
+    assert_int_equal(run_self_update_child(path, "--verify-long"), 0);
+  }
+  assert_int_equal(unlink(link), 0);
+  assert_int_equal(unlink(path), 0);
+  // Also checks that the API cleaned up its temporary files.
+  assert_int_equal(rmdir(dir), 0);
+}
+#endif
+
 static int test_copy_self_with_data_body() {
   // We should not use assert_* functions here because this is run as a
   // subprocess.
@@ -162,12 +292,22 @@ static int test_copy_self_with_data_body() {
 }
 
 int main(int argc, char **argv) {
+#if !defined(_WIN32)
+  if (argc == 2 && (strncmp(argv[1], "--update-", 9) == 0 ||
+                    strncmp(argv[1], "--verify-", 9) == 0)) {
+    return self_update_child(argv[1]);
+  }
+#endif
   if (argc > 1) {
     // test extract_self_data as a subprocess
     return test_copy_self_with_data_body();
   }
 
   const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_self_update_arguments),
+#if !defined(_WIN32)
+      cmocka_unit_test(test_self_update_restarts),
+#endif
       cmocka_unit_test(test_extract_from_specific_file),
       cmocka_unit_test(test_truncate_data),
       cmocka_unit_test(test_copy_self_with_data),

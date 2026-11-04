@@ -14,7 +14,8 @@
 			"extensions": [
 				"llvm-vs-code-extensions.vscode-clangd",
 				"ms-vscode.cmake-tools",
-				"cschlosser.doxdocgen"
+				"cschlosser.doxdocgen",
+				"redhat.vscode-yaml",
 			]
 		}
 	},

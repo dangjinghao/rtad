@@ -2,24 +2,26 @@ name: Test rtad on all platforms
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [main, master, develop]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [main, master, develop]
   workflow_dispatch:
 
 jobs:
   format:
-    name: C formatting
+    name: Formatting
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-    - name: Install pre-commit
-      run: python -m pip install pre-commit
-    - name: Check formatting
-      run: pre-commit run clang-format --all-files --show-diff-on-failure
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pre-commit
+        run: python -m pip install pre-commit
+      - name: Check formatting
+        run: |
+          pre-commit run clang-format --all-files --show-diff-on-failure
+          pre-commit run yamlfix --all-files --show-diff-on-failure
 
   linux:
     name: Linux-${{ matrix.arch }}-${{ matrix.compiler }}
@@ -34,21 +36,21 @@ jobs:
           - arch: arm64
             os: ubuntu-24.04-arm
     steps:
-    - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-    - name: Configure
-      run: |
-        cmake -B build \
-          -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DRTAD_BUILD_TESTS=ON
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DRTAD_BUILD_TESTS=ON
 
-    - name: Build
-      run: cmake --build build --config Release
+      - name: Build
+        run: cmake --build build --config Release
 
-    - name: Test
-      working-directory: build
-      run: ctest --output-on-failure -C Release
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure -C Release
 
   macos:
     name: macOS-${{ matrix.arch }}-${{ matrix.compiler }}
@@ -63,20 +65,20 @@ jobs:
           - arch: arm64
             os: macos-26
     steps:
-    - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-    - name: Configure
-      run: |
-        cmake -B build \
-          -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DRTAD_BUILD_TESTS=ON
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DRTAD_BUILD_TESTS=ON
 
-    - name: Build
-      run: cmake --build build --config Release
-    - name: Test
-      working-directory: build
-      run: ctest --output-on-failure -C Release
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure -C Release
 
   windows:
     name: Windows-${{ matrix.arch }}-${{ matrix.compiler }}
@@ -98,16 +100,15 @@ jobs:
             generator: "Visual Studio 18 2026"
 
     steps:
-    - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-    - name: Configure
-      run: |
-        cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.compiler }} -DRTAD_BUILD_TESTS=ON
+      - name: Configure
+        run: |
+          cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.compiler }} -DRTAD_BUILD_TESTS=ON
 
-    - name: Build
-      run: cmake --build build --config Release
+      - name: Build
+        run: cmake --build build --config Release
 
-    - name: Test
-      working-directory: build
-      run: ctest --output-on-failure -C Release
-
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure -C Release

@@ -7,20 +7,25 @@ int main(int argc, char *argv[]) {
     char *data = NULL;
     size_t data_size = 0;
     int result = rtad_extract_self_data(&data, &data_size);
-    if (result == 0) {
-      printf("Extracted data(%llu): %s\n", data_size, data);
+    if (result == RTAD_OK) {
+      printf("Extracted data(%zu): %s\n", data_size, data);
       rtad_free_extracted_data(data);
       if (argc == 2) {
-        if (rtad_truncate_self_data(argv[1]) != 0) {
-          printf("Failed to truncate self data.\n");
+        result = rtad_truncate_self_data(argv[1]);
+        if (result != RTAD_OK) {
+          fprintf(stderr, "Failed to truncate self data (error %d).\n", result);
+          return EXIT_FAILURE;
         }
         printf("Truncated self data successfully at %s.\n", argv[1]);
       }
-    } else {
+    } else if (result == RTAD_ERR_NO_DATA) {
       printf("No appended data found.\n");
       printf("Usage:\n");
       printf("  %s <path_to_truncated_exe>\n", argv[0]);
       printf("  %s <new_exe_path> <data_to_append>\n", argv[0]);
+    } else {
+      fprintf(stderr, "Failed to extract self data (error %d).\n", result);
+      return EXIT_FAILURE;
     }
   } else {
     const char *new_exe_path = argv[1];
@@ -28,10 +33,11 @@ int main(int argc, char *argv[]) {
     size_t data_size = strlen(data_to_append) + 1; // include null terminator
     int result =
         rtad_copy_self_with_data(new_exe_path, data_to_append, data_size);
-    if (result == 0) {
+    if (result == RTAD_OK) {
       printf("Created new executable with appended data: %s\n", new_exe_path);
     } else {
-      printf("Failed to create new executable.\n");
+      fprintf(stderr, "Failed to create new executable (error %d).\n", result);
+      return EXIT_FAILURE;
     }
   }
   return 0;

@@ -24,7 +24,7 @@ static void test_exe_path_ok(void **state) {
   (void)state; /* unused */
   char buffer[PATH_MAX];
   int result = exe_path(buffer, sizeof(buffer));
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   assert_true(strlen(buffer) > 0);
 }
 
@@ -32,26 +32,26 @@ static void test_exe_path_little_buffer(void **state) {
   (void)state; /* unused */
   char buffer[2];
   int result = exe_path(buffer, sizeof(buffer));
-  assert_int_not_equal(result, 0);
+  assert_int_equal(result, RTAD_ERR_BUFFER_TOO_SMALL);
 }
 
 static void test_exe_path_null_buffer(void **state) {
   (void)state; /* unused */
   int result = exe_path(NULL, 0);
-  assert_int_not_equal(result, 0);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_exe_path_buffer_with_0_length(void **state) {
   (void)state; /* unused */
   char buffer[2];
   int result = exe_path(buffer, 0);
-  assert_int_not_equal(result, 0);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_exe_path_null_buffer_with_wrong_length(void **state) {
   (void)state; /* unused */
   int result = exe_path(NULL, 42);
-  assert_int_not_equal(result, 0);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 const size_t TMP_FILE_SIZE = 1024 * 16;
@@ -109,7 +109,7 @@ static void test_file_truncate_ok(void **state) {
   (void)state; /* unused */
   __create_tmp_file(__FUNCTION__);
   int result = file_truncate(__FUNCTION__, TMP_FILE_SIZE / 2);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   ssize_t length = file_length(__FUNCTION__);
   assert_int_equal(length, TMP_FILE_SIZE / 2);
 }
@@ -117,13 +117,13 @@ static void test_file_truncate_ok(void **state) {
 static void test_file_truncate_wrong_path(void **state) {
   (void)state; /* unused */
   int result = file_truncate("non_existing_file", 1024);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_IO);
 }
 
 static void test_file_truncate_null_path(void **state) {
   (void)state; /* unused */
   int result = file_truncate(NULL, 1024);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_file_length_ok(void **state) {
@@ -136,13 +136,13 @@ static void test_file_length_ok(void **state) {
 static void test_file_length_wrong_path(void **state) {
   (void)state; /* unused */
   ssize_t length = file_length("non_existing_file");
-  assert_int_equal(length, -1);
+  assert_int_equal(length, RTAD_ERR_IO);
 }
 
 static void test_file_length_null_path(void **state) {
   (void)state; /* unused */
   ssize_t length = file_length(NULL);
-  assert_int_equal(length, -1);
+  assert_int_equal(length, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_file_copy_ok(void **state) {
@@ -151,7 +151,7 @@ static void test_file_copy_ok(void **state) {
   const char *dest_path = "test_file_copy_ok_dest";
 
   int result = file_copy(__FUNCTION__, dest_path);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   ssize_t length_src = file_length(__FUNCTION__);
   ssize_t length_dest = file_length(dest_path);
   assert_int_equal(length_src, length_dest);
@@ -160,7 +160,7 @@ static void test_file_copy_ok(void **state) {
 static void test_file_copy_wrong_src_path(void **state) {
   int result =
       file_copy("non_existing_file", "test_file_copy_wrong_src_path_dest");
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_IO);
 }
 
 static void test_file_copy_cannot_create_dest(void **state) {
@@ -168,7 +168,7 @@ static void test_file_copy_cannot_create_dest(void **state) {
   __create_tmp_file(__FUNCTION__);
   // Try to copy to a directory
   int result = file_copy(__FUNCTION__, ".");
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_IO);
 }
 
 static void test_file_copy_self_ok(void **state) {
@@ -176,7 +176,7 @@ static void test_file_copy_self_ok(void **state) {
   const char *dest_path = "test_file_copy_self_ok_dest";
 
   int result = file_copy_self(dest_path);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   char exe_path_buffer[PATH_MAX];
   exe_path(exe_path_buffer, sizeof(exe_path_buffer));
   assert_int_equal(__file_content_cmp(exe_path_buffer, dest_path), 0);
@@ -187,7 +187,7 @@ static void test_file_copy_self_ok(void **state) {
 static void test_file_copy_write_failure(void **state) {
   (void)state;
   __create_tmp_file(__FUNCTION__);
-  assert_int_equal(file_copy(__FUNCTION__, "/dev/full"), -1);
+  assert_int_equal(file_copy(__FUNCTION__, "/dev/full"), RTAD_ERR_IO);
 }
 
 static void test_file_copy_flush_failure(void **state) {
@@ -196,38 +196,39 @@ static void test_file_copy_flush_failure(void **state) {
   assert_non_null(fp);
   assert_int_equal(fputc('x', fp), 'x');
   assert_int_equal(fclose(fp), 0);
-  assert_int_equal(file_copy(__FUNCTION__, "/dev/full"), -1);
+  assert_int_equal(file_copy(__FUNCTION__, "/dev/full"), RTAD_ERR_IO);
 }
 
 static void test_file_copy_read_failure(void **state) {
   (void)state;
   // On Linux, opening a directory succeeds but reading it fails.
-  assert_int_equal(file_copy(".", __FUNCTION__), -1);
+  assert_int_equal(file_copy(".", __FUNCTION__), RTAD_ERR_IO);
 }
 
 static void test_file_append_write_failure(void **state) {
   (void)state;
   char data[BUFFER_SIZE * 4] = {0};
-  assert_int_equal(file_append_data("/dev/full", data, sizeof(data)), -1);
+  assert_int_equal(file_append_data("/dev/full", data, sizeof(data)),
+                   RTAD_ERR_IO);
 }
 
 static void test_file_append_flush_failure(void **state) {
   (void)state;
-  assert_int_equal(file_append_data("/dev/full", "x", 1), -1);
+  assert_int_equal(file_append_data("/dev/full", "x", 1), RTAD_ERR_IO);
 }
 #endif
 
 static void test_file_copy_self_null_dest(void **state) {
   (void)state; /* unused */
   int result = file_copy_self(NULL);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_file_copy_self_invalid_dest(void **state) {
   (void)state; /* unused */
   // Try to copy to a directory
   int result = file_copy_self(".");
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_IO);
 }
 
 static void test_file_append_data_20_bytes(void **state) {
@@ -236,7 +237,7 @@ static void test_file_append_data_20_bytes(void **state) {
   const char *data = "12345678901234567890";
   size_t data_size = strlen(data);
   int result = file_append_data(__FUNCTION__, data, data_size);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   assert_int_equal(file_length(__FUNCTION__), TMP_FILE_SIZE + data_size);
 }
 
@@ -246,7 +247,7 @@ static void test_file_append_data_1_byte(void **state) {
   const char data = 'A';
   size_t data_size = 1;
   int result = file_append_data(__FUNCTION__, &data, data_size);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   assert_int_equal(file_length(__FUNCTION__), TMP_FILE_SIZE + data_size);
 }
 
@@ -255,7 +256,7 @@ static void test_file_append_data_null_path(void **state) {
   const char data = 'A';
   size_t data_size = 1;
   int result = file_append_data(NULL, &data, data_size);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_file_append_data_null_data(void **state) {
@@ -263,7 +264,7 @@ static void test_file_append_data_null_data(void **state) {
   __create_tmp_file(__FUNCTION__);
   size_t data_size = 1;
   int result = file_append_data(__FUNCTION__, NULL, data_size);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_file_append_data_zero_size(void **state) {
@@ -272,28 +273,28 @@ static void test_file_append_data_zero_size(void **state) {
   const char data = 'A';
   size_t data_size = 0;
   int result = file_append_data(__FUNCTION__, &data, data_size);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_extract_hdr_no_buffer(void **state) {
   (void)state; /* unused */
   __create_tmp_file(__FUNCTION__);
   int result = rtad_extract_hdr(__FUNCTION__, NULL);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_extract_hdr_non_existing_file(void **state) {
   (void)state; /* unused */
   struct rtad_hdr hdr;
   int result = rtad_extract_hdr("non_existing_file", &hdr);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_IO);
 }
 
 static void test_rtad_extract_hdr_invalid_file(void **state) {
   (void)state; /* unused */
   struct rtad_hdr hdr;
   int result = rtad_extract_hdr(".", &hdr);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_IO);
 }
 
 static void test_rtad_extract_hdr_invalid_hdr(void **state) {
@@ -301,14 +302,14 @@ static void test_rtad_extract_hdr_invalid_hdr(void **state) {
   __create_tmp_file(__FUNCTION__);
   struct rtad_hdr hdr;
   int result = rtad_extract_hdr(__FUNCTION__, &hdr);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_NO_DATA);
 }
 
 static void test_rtad_extract_hdr_null_path(void **state) {
   (void)state; /* unused */
   struct rtad_hdr hdr;
   int result = rtad_extract_hdr(NULL, &hdr);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_extract_hdr_too_small_file(void **state) {
@@ -323,7 +324,7 @@ static void test_rtad_extract_hdr_too_small_file(void **state) {
   fclose(fp);
   struct rtad_hdr hdr;
   int result = rtad_extract_hdr(filename, &hdr);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_NO_DATA);
 }
 
 static void test_rtad_extract_hdr_ok(void **state) {
@@ -331,7 +332,7 @@ static void test_rtad_extract_hdr_ok(void **state) {
   __create_tmp_file_append_data_hdr(__FUNCTION__, 10);
   struct rtad_hdr hdr_out;
   int result = rtad_extract_hdr(__FUNCTION__, &hdr_out);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   assert_int_equal(hdr_out.data_size, 10);
   assert_memory_equal(hdr_out.magic, RTAD_MAGIC, RTAD_MAGIC_SIZE);
 }
@@ -340,20 +341,20 @@ static void test_rtad_validate_hdr_ok(void **state) {
   (void)state; /* unused */
   __create_tmp_file_append_data_hdr(__FUNCTION__, 10);
   int result = rtad_validate_hdr(__FUNCTION__);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
 }
 
 static void test_rtad_validate_hdr_invalid(void **state) {
   (void)state; /* unused */
   __create_tmp_file(__FUNCTION__);
   int result = rtad_validate_hdr(__FUNCTION__);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_NO_DATA);
 }
 
 static void test_rtad_validate_hdr_non_existing_file(void **state) {
   (void)state; /* unused */
   int result = rtad_validate_hdr("non_existing_file");
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_IO);
 }
 
 // Any other tests for rtad_validate_hdr can be covered by
@@ -362,20 +363,20 @@ static void test_rtad_validate_hdr_non_existing_file(void **state) {
 static void test_rtad_truncate_data_null_path(void **state) {
   (void)state; /* unused */
   int result = rtad_truncate_data(NULL);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_truncate_data_non_existing_file(void **state) {
   (void)state; /* unused */
   int result = rtad_truncate_data("non_existing_file");
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_IO);
 }
 
 static void test_rtad_truncate_data_invalid_hdr(void **state) {
   (void)state; /* unused */
   __create_tmp_file(__FUNCTION__);
   int result = rtad_truncate_data(__FUNCTION__);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
 }
 
 static void test_rtad_truncate_data_file_smaller_than_hdr(void **state) {
@@ -389,7 +390,7 @@ static void test_rtad_truncate_data_file_smaller_than_hdr(void **state) {
   }
   fclose(fp);
   int result = rtad_truncate_data(filename);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
 }
 
 static void test_rtad_truncate_data_ok(void **state) {
@@ -397,7 +398,7 @@ static void test_rtad_truncate_data_ok(void **state) {
   __create_tmp_file_append_data_hdr(__FUNCTION__, 20);
   ssize_t length_before = file_length(__FUNCTION__);
   int result = rtad_truncate_data(__FUNCTION__);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   ssize_t length_after = file_length(__FUNCTION__);
   assert_int_equal(length_before - length_after, 20 + sizeof(struct rtad_hdr));
 }
@@ -406,14 +407,14 @@ static void test_rtad_append_packed_data_null_dest_path(void **state) {
   (void)state; /* unused */
   const char data[] = "data";
   int result = rtad_append_packed_data(NULL, data, sizeof(data));
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_append_packed_data_null_data(void **state) {
   (void)state; /* unused */
   __create_tmp_file(__FUNCTION__);
   int result = rtad_append_packed_data(__FUNCTION__, NULL, 10);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_append_packed_data_zero_size(void **state) {
@@ -421,7 +422,7 @@ static void test_rtad_append_packed_data_zero_size(void **state) {
   __create_tmp_file(__FUNCTION__);
   const char data[] = "data";
   int result = rtad_append_packed_data(__FUNCTION__, data, 0);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_append_packed_data_larger_than_uint32_max(void **state) {
@@ -430,7 +431,7 @@ static void test_rtad_append_packed_data_larger_than_uint32_max(void **state) {
   const char data[] = "data";
   int result =
       rtad_append_packed_data(__FUNCTION__, data, (size_t)UINT32_MAX + 1);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_TOO_LARGE);
 }
 
 static void test_rtad_append_packed_data_ok(void **state) {
@@ -439,11 +440,11 @@ static void test_rtad_append_packed_data_ok(void **state) {
   static const char data[] = "Hello, RTAD!";
   size_t data_size = strlen(data);
   int result = rtad_append_packed_data(__FUNCTION__, data, data_size);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   // Validate by extracting header
   struct rtad_hdr hdr_out;
   result = rtad_extract_hdr(__FUNCTION__, &hdr_out);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   assert_int_equal(hdr_out.data_size, data_size);
   assert_memory_equal(hdr_out.magic, RTAD_MAGIC, RTAD_MAGIC_SIZE);
   // check the appended data
@@ -463,14 +464,14 @@ static void test_rtad_copy_self_with_data_null_dest_path(void **state) {
   (void)state; /* unused */
   const char data[] = "data";
   int result = rtad_copy_self_with_data(NULL, data, sizeof(data));
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_copy_self_with_data_null_append_data(void **state) {
   (void)state; /* unused */
   const char *dest_path = __FUNCTION__;
   int result = rtad_copy_self_with_data(dest_path, NULL, 10);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_copy_self_with_data_zero_size(void **state) {
@@ -478,7 +479,7 @@ static void test_rtad_copy_self_with_data_zero_size(void **state) {
   const char *dest_path = __FUNCTION__;
   const char data[] = "data";
   int result = rtad_copy_self_with_data(dest_path, data, 0);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_copy_self_with_data_ok(void **state) {
@@ -488,11 +489,11 @@ static void test_rtad_copy_self_with_data_ok(void **state) {
   size_t data_size = sizeof(data) - 1;
 
   int result = rtad_copy_self_with_data(dest_path, data, data_size);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   // Validate by extracting header
   struct rtad_hdr hdr_out;
   result = rtad_extract_hdr(dest_path, &hdr_out);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   assert_int_equal(hdr_out.data_size, data_size);
   assert_memory_equal(hdr_out.magic, RTAD_MAGIC, RTAD_MAGIC_SIZE);
   // check the appended data
@@ -514,21 +515,21 @@ static void test_rtad_extract_data_null_exe_path(void **state) {
   char *out_data = NULL;
   size_t out_data_size = 0;
   int result = rtad_extract_data(NULL, &out_data, &out_data_size);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_extract_data_null_out_data(void **state) {
   (void)state; /* unused */
   size_t out_data_size = 0;
   int result = rtad_extract_data(__FUNCTION__, NULL, &out_data_size);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_extract_data_null_out_data_size(void **state) {
   (void)state; /* unused */
   char *out_data = NULL;
   int result = rtad_extract_data(__FUNCTION__, &out_data, NULL);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_extract_data_ok(void **state) {
@@ -540,7 +541,7 @@ static void test_rtad_extract_data_ok(void **state) {
   char *out_data = NULL;
   size_t out_data_size = 0;
   int result = rtad_extract_data(__FUNCTION__, &out_data, &out_data_size);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   assert_int_equal(out_data_size, data_size);
   assert_memory_equal(out_data, data, data_size);
   rtad_free_extracted_data(out_data);
@@ -551,14 +552,14 @@ static void test_rtad_extract_data_ok(void **state) {
 static void test_rtad_extract_self_data_null_out_data(void **state) {
   (void)state; /* unused */
   int result = rtad_extract_self_data(NULL, NULL);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_extract_self_data_null_out_data_size(void **state) {
   (void)state; /* unused */
   char *out_data = NULL;
   int result = rtad_extract_self_data(&out_data, NULL);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_INVALID_ARGUMENT);
 }
 
 static void test_rtad_extract_self_data_no_valid_rtad_data(void **state) {
@@ -566,7 +567,7 @@ static void test_rtad_extract_self_data_no_valid_rtad_data(void **state) {
   char *out_data = NULL;
   size_t out_data_size = 0;
   int result = rtad_extract_self_data(&out_data, &out_data_size);
-  assert_int_equal(result, -1);
+  assert_int_equal(result, RTAD_ERR_NO_DATA);
 }
 
 static void test_rtad_extract_self_data_ok(void **state) {
@@ -580,14 +581,72 @@ static void test_rtad_extract_self_data_ok(void **state) {
   char *out_data = NULL;
   size_t out_data_size = 0;
   int result = rtad_extract_data(new_path, &out_data, &out_data_size);
-  assert_int_equal(result, 0);
+  assert_int_equal(result, RTAD_OK);
   assert_int_equal(out_data_size, data_size);
   assert_memory_equal(out_data, data, data_size);
   rtad_free_extracted_data(out_data);
 }
 
+static void test_public_error_codes(void **state) {
+  (void)state;
+  char *data = NULL;
+  size_t size = 0;
+  assert_int_equal(rtad_extract_data("non_existing_file", &data, &size),
+                   RTAD_ERR_IO);
+  assert_int_equal(rtad_copy_self_with_data(".", "x", 1), RTAD_ERR_IO);
+  assert_int_equal(rtad_truncate_self_data("."), RTAD_ERR_IO);
+  assert_int_equal(rtad_truncate_self_data(NULL), RTAD_ERR_INVALID_ARGUMENT);
+  assert_int_equal(rtad_free_extracted_data(NULL), RTAD_ERR_INVALID_ARGUMENT);
+  __create_tmp_file(__FUNCTION__);
+  assert_int_equal(rtad_extract_data(__FUNCTION__, &data, &size),
+                   RTAD_ERR_NO_DATA);
+  assert_int_equal(rtad_truncate_data(__FUNCTION__), RTAD_OK);
+  assert_int_equal(file_length(__FUNCTION__), TMP_FILE_SIZE);
+}
+
+static void test_invalid_format_errors(void **state) {
+  (void)state;
+  const uint32_t lengths[] = {0, 1000, UINT32_MAX};
+  for (size_t i = 0; i < sizeof(lengths) / sizeof(lengths[0]); i++) {
+    struct rtad_hdr hdr = {.data_size = lengths[i]};
+    memcpy(hdr.magic, RTAD_MAGIC, RTAD_MAGIC_SIZE);
+    FILE *fp = fopen(__FUNCTION__, "wb");
+    assert_non_null(fp);
+    assert_int_equal(fwrite(&hdr, 1, sizeof(hdr), fp), sizeof(hdr));
+    assert_int_equal(fclose(fp), 0);
+    char *data = NULL;
+    size_t size = 0;
+    assert_int_equal(rtad_validate_hdr(__FUNCTION__), RTAD_ERR_INVALID_FORMAT);
+    assert_int_equal(rtad_extract_data(__FUNCTION__, &data, &size),
+                     RTAD_ERR_INVALID_FORMAT);
+    assert_int_equal(rtad_truncate_data(__FUNCTION__), RTAD_ERR_INVALID_FORMAT);
+    assert_int_equal(file_length(__FUNCTION__), sizeof(hdr));
+    assert_null(data);
+  }
+}
+
+static void test_copy_oversize_preserves_destination(void **state) {
+  (void)state;
+#if SIZE_MAX > UINT32_MAX
+  __create_tmp_file(__FUNCTION__);
+  assert_int_equal(
+      rtad_copy_self_with_data(__FUNCTION__, "x", (size_t)UINT32_MAX + 1),
+      RTAD_ERR_TOO_LARGE);
+  assert_int_equal(file_length(__FUNCTION__), TMP_FILE_SIZE);
+  FILE *fp = fopen(__FUNCTION__, "rb");
+  assert_non_null(fp);
+  for (size_t i = 0; i < TMP_FILE_SIZE; i++) {
+    assert_int_equal(fgetc(fp), (unsigned char)i);
+  }
+  assert_int_equal(fclose(fp), 0);
+#endif
+}
+
 int main(void) {
   const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_public_error_codes),
+      cmocka_unit_test(test_invalid_format_errors),
+      cmocka_unit_test(test_copy_oversize_preserves_destination),
       cmocka_unit_test(test_exe_path_ok),
       cmocka_unit_test(test_exe_path_little_buffer),
       cmocka_unit_test(test_exe_path_null_buffer),

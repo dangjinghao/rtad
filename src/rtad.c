@@ -3,64 +3,78 @@
 #if defined(_WIN32)
 RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
   if (!buffer || buf_size == 0)
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   WCHAR wc_buf[MAX_PATH];
   DWORD len = GetModuleFileNameW(NULL, wc_buf, (DWORD)MAX_PATH);
-  if (len == 0 || len >= MAX_PATH) {
-    return -1;
+  if (len == 0) {
+    return RTAD_ERR_EXE_PATH;
+  }
+  if (len >= MAX_PATH) {
+    return RTAD_ERR_BUFFER_TOO_SMALL;
+  }
+  if (buf_size > INT_MAX) {
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
 
   int result = WideCharToMultiByte(CP_ACP, 0, wc_buf, -1, buffer, (int)buf_size,
                                    NULL, NULL);
   if (result == 0) {
-    return -1;
+    if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
+      return RTAD_ERR_BUFFER_TOO_SMALL;
+    }
+    return RTAD_ERR_EXE_PATH;
   }
-  return 0;
+  return RTAD_OK;
 }
 
 #if defined(_MSC_VER)
 RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
-  if (!path || size == 0) {
-    return -1;
+  if (!path) {
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
   int wc_len = MultiByteToWideChar(CP_ACP, 0, path, -1, NULL, 0);
   if (wc_len == 0) {
-    return -1;
+    return RTAD_ERR_IO;
   }
   WCHAR *wc_path = (WCHAR *)malloc(wc_len * sizeof(WCHAR));
   if (!wc_path) {
-    return -1;
+    return RTAD_ERR_NO_MEMORY;
   }
   if (MultiByteToWideChar(CP_ACP, 0, path, -1, wc_path, wc_len) == 0) {
     free(wc_path);
-    return -1;
+    return RTAD_ERR_IO;
   }
   HANDLE hFile = CreateFileW(wc_path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
                              FILE_ATTRIBUTE_NORMAL, NULL);
   free(wc_path);
   if (hFile == INVALID_HANDLE_VALUE) {
-    return -1;
+    return RTAD_ERR_IO;
   }
   LARGE_INTEGER li = {.QuadPart = (LONGLONG)size};
   if (SetFilePointerEx(hFile, li, NULL, FILE_BEGIN) == 0) {
     CloseHandle(hFile);
-    return -1;
+    return RTAD_ERR_IO;
   }
   if (SetEndOfFile(hFile) == 0) {
     CloseHandle(hFile);
-    return -1;
+    return RTAD_ERR_IO;
   }
-  CloseHandle(hFile);
-  return 0;
+  if (CloseHandle(hFile) == 0) {
+    return RTAD_ERR_IO;
+  }
+  return RTAD_OK;
 }
 
 // GCC or Clang on Windows
 #elif defined(__GNUC__) || defined(__clang__)
 RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
-  if (!path || size == 0) {
-    return -1;
+  if (!path) {
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
-  return truncate(path, (off_t)size);
+  if (truncate(path, (off_t)size) != 0) {
+    return RTAD_ERR_IO;
+  }
+  return RTAD_OK;
 }
 
 #else
@@ -71,44 +85,53 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
 #elif defined(__APPLE__)
 RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
   if (!buffer || buf_size == 0)
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
+  if (buf_size > UINT32_MAX) {
+    return RTAD_ERR_INVALID_ARGUMENT;
+  }
   uint32_t size = (uint32_t)buf_size;
   if (_NSGetExecutablePath(buffer, &size) != 0) {
     // Buffer too small
     if (buf_size > 0)
       buffer[buf_size - 1] = '\0';
-    return -1;
+    return RTAD_ERR_BUFFER_TOO_SMALL;
   }
-  return 0;
+  return RTAD_OK;
 }
 
 RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
-  if (!path || size == 0) {
-    return -1;
+  if (!path) {
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
-  return truncate(path, (off_t)size);
+  if (truncate(path, (off_t)size) != 0) {
+    return RTAD_ERR_IO;
+  }
+  return RTAD_OK;
 }
 
 #elif defined(__linux__)
 RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
   if (!buffer || buf_size == 0)
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   ssize_t len = readlink("/proc/self/exe", buffer, buf_size);
   if (len == -1) {
-    return -1;
-  } else if (len == buf_size) {
+    return RTAD_ERR_EXE_PATH;
+  } else if ((size_t)len == buf_size) {
     // Buffer too small
-    return -1;
+    return RTAD_ERR_BUFFER_TOO_SMALL;
   }
   buffer[len] = '\0';
-  return 0;
+  return RTAD_OK;
 }
 
 RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
-  if (!path || size == 0) {
-    return -1;
+  if (!path) {
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
-  return truncate(path, (off_t)size);
+  if (truncate(path, (off_t)size) != 0) {
+    return RTAD_ERR_IO;
+  }
+  return RTAD_OK;
 }
 
 #else
@@ -118,63 +141,67 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
 
 RTAD_PRIVATE ssize_t file_length(const char *path) {
   if (!path) {
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
   FILE *fp = fopen(path, "rb");
   if (!fp) {
-    return -1;
+    return RTAD_ERR_IO;
   }
   if (fseeko(fp, 0, SEEK_END) != 0) {
     fclose(fp);
-    return -1;
+    return RTAD_ERR_IO;
   }
   off_t size = ftello(fp);
-  fclose(fp);
+  int close_result = fclose(fp);
+  if (size < 0 || close_result != 0) {
+    return RTAD_ERR_IO;
+  }
   return size;
 }
 
 RTAD_PRIVATE int file_copy(const char *src_path, const char *dest_path) {
   if (!src_path || !dest_path) {
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
   FILE *src_fp = fopen(src_path, "rb");
   if (!src_fp) {
-    return -1;
+    return RTAD_ERR_IO;
   }
   FILE *dest_fp = fopen(dest_path, "wb");
   if (!dest_fp) {
     fclose(src_fp);
-    return -1;
+    return RTAD_ERR_IO;
   }
   char copy_buf[BUFFER_SIZE];
   size_t bytes;
-  int result = 0;
+  int result = RTAD_OK;
   while ((bytes = fread(copy_buf, 1, sizeof(copy_buf), src_fp)) > 0) {
     if (fwrite(copy_buf, 1, bytes, dest_fp) != bytes) {
-      result = -1;
+      result = RTAD_ERR_IO;
       break;
     }
   }
   if (ferror(src_fp) || ferror(dest_fp)) {
-    result = -1;
+    result = RTAD_ERR_IO;
   }
   if (fclose(src_fp) != 0) {
-    result = -1;
+    result = RTAD_ERR_IO;
   }
   // Buffered writes can fail only when the destination is closed.
   if (fclose(dest_fp) != 0) {
-    result = -1;
+    result = RTAD_ERR_IO;
   }
   return result;
 }
 
 RTAD_PRIVATE int file_copy_self(const char *dest_path) {
   if (!dest_path) {
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
   char pathBuf[PATH_MAX];
-  if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
-    return -1;
+  int result = exe_path(pathBuf, sizeof(pathBuf));
+  if (result != RTAD_OK) {
+    return result;
   }
   return file_copy(pathBuf, dest_path);
 }
@@ -182,54 +209,74 @@ RTAD_PRIVATE int file_copy_self(const char *dest_path) {
 RTAD_PRIVATE int file_append_data(const char *path, const char *data,
                                   size_t data_size) {
   if (!path || !data || data_size == 0) {
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
   FILE *fp = fopen(path, "ab");
   if (!fp) {
-    return -1;
+    return RTAD_ERR_IO;
   }
   size_t written = fwrite(data, 1, data_size, fp);
-  int result = 0;
+  int result = RTAD_OK;
   if (written != data_size || ferror(fp)) {
-    result = -1;
+    result = RTAD_ERR_IO;
   }
   if (fclose(fp) != 0) {
-    result = -1;
+    result = RTAD_ERR_IO;
   }
   return result;
 }
 
-int rtad_extract_hdr(const char *exe_path, struct rtad_hdr *header) {
+RTAD_PRIVATE int rtad_extract_hdr(const char *exe_path,
+                                  struct rtad_hdr *header) {
   if (!header || !exe_path) {
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
   FILE *fp = fopen(exe_path, "rb");
   if (!fp) {
-    return -1;
+    return RTAD_ERR_IO;
+  }
+  if (fseeko(fp, 0, SEEK_END) != 0) {
+    fclose(fp);
+    return RTAD_ERR_IO;
+  }
+  off_t size = ftello(fp);
+  if (size < 0) {
+    fclose(fp);
+    return RTAD_ERR_IO;
+  }
+  if ((uintmax_t)size < RTAD_HDR_SIZE) {
+    if (fclose(fp) != 0) {
+      return RTAD_ERR_IO;
+    }
+    return RTAD_ERR_NO_DATA;
   }
   if (fseeko(fp, -((off_t)RTAD_HDR_SIZE), SEEK_END) != 0) {
     fclose(fp);
-    return -1;
+    return RTAD_ERR_IO;
   }
   struct rtad_hdr temp_header;
-  // too small file to contain header
   if (fread(&temp_header, 1, sizeof(temp_header), fp) != sizeof(temp_header)) {
     fclose(fp);
-    return -1;
+    return RTAD_ERR_IO;
   }
-  fclose(fp);
-  fp = NULL;
+  if (fclose(fp) != 0) {
+    return RTAD_ERR_IO;
+  }
   if (memcmp(temp_header.magic, RTAD_MAGIC, sizeof(temp_header.magic)) != 0) {
-    return -1;
+    return RTAD_ERR_NO_DATA;
+  }
+  if (temp_header.data_size == 0 ||
+      temp_header.data_size > (uintmax_t)size - RTAD_HDR_SIZE) {
+    return RTAD_ERR_INVALID_FORMAT;
   }
   *header = temp_header;
-  return 0;
+  return RTAD_OK;
 }
 
 int rtad_validate_hdr(const char *exe_path) {
   struct rtad_hdr header;
   if (!exe_path) {
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
   return rtad_extract_hdr(exe_path, &header);
 }
@@ -237,134 +284,137 @@ int rtad_validate_hdr(const char *exe_path) {
 int rtad_truncate_data(const char *exe_path) {
   struct rtad_hdr header;
   if (!exe_path) {
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
-
+  int result = rtad_extract_hdr(exe_path, &header);
+  if (result == RTAD_ERR_NO_DATA) {
+    return RTAD_OK;
+  }
+  if (result != RTAD_OK) {
+    return result;
+  }
   ssize_t file_size = file_length(exe_path);
   if (file_size < 0) {
-    // could not get file size
-    // or file does not exist
-    return -1;
+    return (int)file_size;
   }
-  if (rtad_extract_hdr(exe_path, &header) != 0) {
-    // no valid header, nothing to truncate
-    return 0;
+  if ((uintmax_t)file_size < RTAD_HDR_SIZE ||
+      header.data_size > (uintmax_t)file_size - RTAD_HDR_SIZE) {
+    return RTAD_ERR_INVALID_FORMAT;
   }
-
-  size_t new_size =
-      (size_t)file_size - (header.data_size + sizeof(struct rtad_hdr));
-  if (file_truncate(exe_path, new_size) != 0) {
-    return -1;
-  }
-  return 0;
+  size_t new_size = (size_t)file_size - RTAD_HDR_SIZE - header.data_size;
+  return file_truncate(exe_path, new_size);
 }
 
-int rtad_append_packed_data(const char *dest_path, const char *append_data,
-                            size_t append_data_size) {
-  if (append_data_size > UINT32_MAX || !dest_path || !append_data ||
-      append_data_size == 0) {
-    return -1;
+RTAD_PRIVATE int rtad_append_packed_data(const char *dest_path,
+                                         const char *append_data,
+                                         size_t append_data_size) {
+  if (!dest_path || !append_data || append_data_size == 0) {
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
-  if (file_append_data(dest_path, append_data, append_data_size) != 0) {
-    return -1;
+  if (append_data_size > UINT32_MAX) {
+    return RTAD_ERR_TOO_LARGE;
+  }
+  int result = file_append_data(dest_path, append_data, append_data_size);
+  if (result != RTAD_OK) {
+    return result;
   }
   struct rtad_hdr header = {.data_size = (uint32_t)append_data_size};
   memcpy(header.magic, RTAD_MAGIC, sizeof(header.magic));
-  if (file_append_data(dest_path, (const char *)&header, sizeof(header)) != 0) {
-    return -1;
-  }
-
-  return 0;
+  return file_append_data(dest_path, (const char *)&header, sizeof(header));
 }
 
 int rtad_copy_self_with_data(const char *dest_path, const char *append_data,
                              size_t append_data_size) {
   if (!dest_path || !append_data || append_data_size == 0) {
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
-  if (file_copy_self(dest_path) != 0) {
-    return -1;
+  if (append_data_size > UINT32_MAX) {
+    return RTAD_ERR_TOO_LARGE;
   }
-  // try to validate and truncate
-  if (rtad_truncate_data(dest_path) != 0) {
-    return -1;
+  int result = file_copy_self(dest_path);
+  if (result != RTAD_OK) {
+    return result;
   }
-  if (rtad_append_packed_data(dest_path, append_data, append_data_size) != 0) {
-    return -1;
+  result = rtad_truncate_data(dest_path);
+  if (result != RTAD_OK) {
+    return result;
   }
-  return 0;
+  return rtad_append_packed_data(dest_path, append_data, append_data_size);
 }
 
 int rtad_extract_data(const char *exe_path, char **out_data,
                       size_t *out_data_size) {
   if (!exe_path || !out_data || !out_data_size) {
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
   struct rtad_hdr header;
-  if (rtad_extract_hdr(exe_path, &header) != 0) {
-    return -1;
+  int result = rtad_extract_hdr(exe_path, &header);
+  if (result != RTAD_OK) {
+    return result;
   }
   FILE *fp = fopen(exe_path, "rb");
   if (!fp) {
-    return -1;
+    return RTAD_ERR_IO;
   }
-  if (fseeko(fp, -((off_t)(header.data_size + sizeof(struct rtad_hdr))),
-             SEEK_END) != 0) {
+  if (fseeko(fp, -((off_t)header.data_size + (off_t)RTAD_HDR_SIZE), SEEK_END) !=
+      0) {
     fclose(fp);
-    return -1;
+    return RTAD_ERR_IO;
   }
   char *data_buf = (char *)malloc(header.data_size);
   if (!data_buf) {
     fclose(fp);
-    return -1;
+    return RTAD_ERR_NO_MEMORY;
   }
   if (fread(data_buf, 1, header.data_size, fp) != header.data_size) {
     free(data_buf);
     fclose(fp);
-    return -1;
+    return RTAD_ERR_IO;
   }
-  fclose(fp);
+  if (fclose(fp) != 0) {
+    free(data_buf);
+    return RTAD_ERR_IO;
+  }
   *out_data = data_buf;
   if (out_data_size) {
     *out_data_size = header.data_size;
   }
-  return 0;
+  return RTAD_OK;
 }
 
 int rtad_free_extracted_data(char *data) {
   if (!data) {
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
   free(data);
-  return 0;
+  return RTAD_OK;
 }
 
 int rtad_extract_self_data(char **out_data, size_t *out_data_size) {
   if (!out_data || !out_data_size) {
-    return -1;
+    return RTAD_ERR_INVALID_ARGUMENT;
   }
   char pathBuf[PATH_MAX];
-  if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
-    return -1;
+  int result = exe_path(pathBuf, sizeof(pathBuf));
+  if (result != RTAD_OK) {
+    return result;
   }
   return rtad_extract_data(pathBuf, out_data, out_data_size);
 }
 
 int rtad_validate_self_hdr() {
   char pathBuf[PATH_MAX];
-  if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
-    return -1;
+  int result = exe_path(pathBuf, sizeof(pathBuf));
+  if (result != RTAD_OK) {
+    return result;
   }
   return rtad_validate_hdr(pathBuf);
 }
 
 int rtad_truncate_self_data(const char *new_path) {
-  char pathBuf[PATH_MAX];
-  if (exe_path(pathBuf, sizeof(pathBuf)) != 0) {
-    return -1;
-  }
-  if (file_copy_self(new_path) != 0) {
-    return -1;
+  int result = file_copy_self(new_path);
+  if (result != RTAD_OK) {
+    return result;
   }
   return rtad_truncate_data(new_path);
 }

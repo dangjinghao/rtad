@@ -1,6 +1,8 @@
 #ifndef __RTAD_PRIVATE_H__
 #define __RTAD_PRIVATE_H__
 
+#include "rtad.h" // IWYU pragma: keep
+
 #define BUFFER_SIZE 4096
 
 // platform-specific includes
@@ -62,7 +64,7 @@
  *
  * @param buffer
  * @param buf_size
- * @return 0 if success, -1 on error
+ * @return RTAD_OK on success, a negative rtad_error on failure
  */
 RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size);
 /**
@@ -72,7 +74,7 @@ RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size);
  *
  * @param path
  * @param size
- * @return 0 if success, -1 on error
+ * @return RTAD_OK on success, a negative rtad_error on failure
  */
 RTAD_PRIVATE int file_truncate(const char *path, size_t size);
 
@@ -88,22 +90,15 @@ RTAD_PACKED_STRUCT(struct rtad_hdr {
 
 #define RTAD_HDR_SIZE (sizeof(struct rtad_hdr))
 
+// Returns the file size, or a negative rtad_error.
 RTAD_PRIVATE ssize_t file_length(const char *path);
 RTAD_PRIVATE int file_copy(const char *src_path, const char *dest_path);
 RTAD_PRIVATE int file_copy_self(const char *dest_path);
 RTAD_PRIVATE int file_append_data(const char *path, const char *data,
                                   size_t data_size);
-int rtad_extract_hdr(const char *exe_path, struct rtad_hdr *header);
-int rtad_validate_hdr(const char *exe_path);
-int rtad_truncate_data(const char *exe_path);
-int rtad_truncate_self_data(const char *new_path);
-int rtad_append_packed_data(const char *dest_path, const char *append_data,
-                            size_t append_data_size);
-int rtad_copy_self_with_data(const char *dest_path, const char *append_data,
-                             size_t append_data_size);
-int rtad_extract_data(const char *exe_path, char **out_data,
-                      size_t *out_data_size);
-int rtad_free_extracted_data(char *data);
-int rtad_extract_self_data(char **out_data, size_t *out_data_size);
-int rtad_validate_self_hdr();
+RTAD_PRIVATE int rtad_extract_hdr(const char *exe_path,
+                                  struct rtad_hdr *header);
+RTAD_PRIVATE int rtad_append_packed_data(const char *dest_path,
+                                         const char *append_data,
+                                         size_t append_data_size);
 #endif

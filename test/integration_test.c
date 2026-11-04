@@ -27,7 +27,8 @@ static void test_extract_from_specific_file(void **state) {
   assert_int_equal(result, 0);
   char *out_data = NULL;
   size_t out_data_size = 0;
-  rtad_extract_data(__FUNCTION__, &out_data, &out_data_size);
+  result = rtad_extract_data(__FUNCTION__, &out_data, &out_data_size);
+  assert_int_equal(result, RTAD_OK);
   assert_non_null(out_data);
   assert_int_equal(out_data_size, 7);
   assert_memory_equal(out_data, "abcdefg", 7);
@@ -43,7 +44,8 @@ static void test_truncate_data(void **state) {
   assert_int_equal(result, 0);
   char *out_data = NULL;
   size_t out_data_size = 0;
-  rtad_extract_data(__FUNCTION__, &out_data, &out_data_size);
+  result = rtad_extract_data(__FUNCTION__, &out_data, &out_data_size);
+  assert_int_equal(result, RTAD_ERR_NO_DATA);
   assert_null(out_data);
   assert_int_equal(out_data_size, 0);
 }
@@ -76,8 +78,11 @@ static void test_copy_self_with_data_write_failure(void **state) {
       if (setrlimit(RLIMIT_FSIZE, &limit) != 0) {
         _exit(2);
       }
-      _exit(rtad_copy_self_with_data(dest, the_data, the_data_size) == -1 ? 0
-                                                                          : 1);
+      int result = rtad_copy_self_with_data(dest, the_data, the_data_size);
+      if (result != RTAD_ERR_IO) {
+        _exit(1);
+      }
+      _exit(0);
     }
     int status;
     pid_t waited = waitpid(pid, &status, 0);

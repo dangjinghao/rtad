@@ -1,0 +1,17 @@
+repos:
+  - repo: local
+    hooks:
+      - id: clang-format
+        name: Format C sources (clang-format 19.1.7)
+        entry: clang-format -i
+        language: python
+        additional_dependencies: [clang-format==19.1.7]
+        files: ^(src|include|test|example)/.*\.[ch]$
+        types: [file]
+      - id: cmake-test
+        name: Build and run CMake tests
+        entry: cmake -P cmake/PreCommit.cmake
+        language: system
+        pass_filenames: false
+        always_run: true
+        require_serial: true

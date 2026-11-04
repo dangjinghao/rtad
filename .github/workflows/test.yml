@@ -8,6 +8,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  format:
+    name: C formatting
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install pre-commit
+      run: python -m pip install pre-commit
+    - name: Check formatting
+      run: pre-commit run clang-format --all-files --show-diff-on-failure
+
   linux:
     name: Linux-${{ matrix.arch }}-${{ matrix.compiler }}
     runs-on: ${{ matrix.os }}
@@ -29,10 +42,10 @@ jobs:
           -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
           -DCMAKE_BUILD_TYPE=Release \
           -DRTAD_BUILD_TESTS=ON
-    
+
     - name: Build
       run: cmake --build build --config Release
-    
+
     - name: Test
       working-directory: build
       run: ctest --output-on-failure -C Release
@@ -58,7 +71,7 @@ jobs:
           -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
           -DCMAKE_BUILD_TYPE=Release \
           -DRTAD_BUILD_TESTS=ON
-    
+
     - name: Build
       run: cmake --build build --config Release
     - name: Test
@@ -94,11 +107,11 @@ jobs:
     - name: Configure
       run: |
         cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.compiler }} -DRTAD_BUILD_TESTS=ON
-      
+
     - name: Build
       run: cmake --build build --config Release
-      
+
     - name: Test
       working-directory: build
       run: ctest --output-on-failure -C Release
-    
+

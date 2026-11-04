@@ -18,7 +18,7 @@
 			]
 		}
 	},
-	"postCreateCommand": "sudo apt-get update && sudo apt-get install -y clangd cmake"
+	"postCreateCommand": "sudo apt-get update && sudo apt-get install -y gcc clangd cmake pre-commit && pre-commit install"
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"
 }

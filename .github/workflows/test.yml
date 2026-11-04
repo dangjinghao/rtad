@@ -12,7 +12,7 @@ jobs:
     name: C formatting
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - uses: actions/setup-python@v5
       with:
         python-version: '3.12'
@@ -30,11 +30,11 @@ jobs:
         compiler: [gcc, clang]
         include:
           - arch: x64
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - arch: arm64
             os: ubuntu-24.04-arm
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Configure
       run: |
@@ -61,9 +61,9 @@ jobs:
           - arch: x64
             os: macos-15-intel
           - arch: arm64
-            os: macos-latest
+            os: macos-26
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Configure
       run: |
@@ -87,9 +87,9 @@ jobs:
         compiler: [msvc, gcc, clang]
         include:
           - arch: x64
-            os: windows-latest
+            os: windows-2025-vs2026
           - arch: arm64
-            os: windows-11-arm
+            os: windows-11-vs2026-arm
           - compiler: gcc
             generator: Ninja
           - compiler: clang
@@ -98,7 +98,7 @@ jobs:
             generator: "Visual Studio 18 2026"
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Configure
       run: |

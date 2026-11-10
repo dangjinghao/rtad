@@ -24,6 +24,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+// A Windows UTF-16 code unit can expand to three UTF-8 bytes.
+#if defined(_WIN32)
+#define RTAD_PATH_MAX (3 * MAX_PATH)
+#else
+#define RTAD_PATH_MAX PATH_MAX
+#endif
+
 // Cross-platform compatibility macros
 #if defined(_MSC_VER)
 #define _CRT_SECURE_NO_WARNINGS
@@ -58,8 +65,8 @@
 
 // platform-specific implementations
 /**
- * @brief Get the executable path, if the the return value is not 0,
- * the buffer maybe not ended with '\0', so don't use the buffer if error
+ * @brief Get the executable path (UTF-8 on Windows), if the return value is not
+ * 0, the buffer maybe not ended with '\0', so don't use the buffer if error
  * happens.
  *
  * @param buffer
@@ -67,6 +74,12 @@
  * @return RTAD_OK on success, a negative rtad_error on failure
  */
 RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size);
+#if defined(_WIN32)
+/** Convert a UTF-8 path; caller frees the result on success. */
+RTAD_PRIVATE int utf8_path_to_wide(const char *path, WCHAR **out_path);
+#endif
+/** Open a native path (UTF-8 on Windows); internal modes: rb, wb, ab. */
+RTAD_PRIVATE FILE *file_open(const char *path, const char *mode);
 /**
  * @brief A wrapper of platform-specific file truncate function,
  * the behavior **SHOULD** be same as POSIX truncate.

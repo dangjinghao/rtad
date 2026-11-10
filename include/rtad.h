@@ -2,6 +2,12 @@
 #define __RTAD_H__
 #include <stddef.h>
 
+/**
+ * File path arguments use UTF-8 on Windows and native filesystem bytes on
+ * Linux/macOS (normally UTF-8). Windows callers using ANSI strings must convert
+ * them to UTF-8 first. Payload bytes are not subject to encoding conversion.
+ */
+
 /** Status-returning API functions use RTAD_OK or a negative rtad_error. */
 typedef enum {
   RTAD_OK = 0,

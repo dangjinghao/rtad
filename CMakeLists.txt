@@ -41,6 +41,10 @@ if(RTAD_BUILD_TESTS)
 
     # Unit tests
     add_executable(rtad_unit_test test/unit_test.c)
+    target_compile_features(rtad_unit_test PRIVATE c_std_11)
+    if(MSVC)
+        target_compile_options(rtad_unit_test PRIVATE /utf-8)
+    endif()
 
     target_include_directories(rtad_unit_test PRIVATE ${cmocka_SOURCE_DIR}/include)
     target_include_directories(rtad_unit_test PRIVATE src)
@@ -60,4 +64,15 @@ if(RTAD_BUILD_TESTS)
 
     target_link_libraries(rtad_integration_test PRIVATE rtad_test cmocka)
     add_test(NAME integration_tests COMMAND rtad_integration_test)
+
+    # ASCII driver; CJK directories and executable names are created at runtime.
+    add_executable(rtad_cjk_path_test test/cjk_path_test.c)
+    target_compile_features(rtad_cjk_path_test PRIVATE c_std_11)
+    if(MSVC)
+        target_compile_options(rtad_cjk_path_test PRIVATE /utf-8)
+    endif()
+    target_include_directories(rtad_cjk_path_test PRIVATE ${cmocka_SOURCE_DIR}/include include)
+    target_link_libraries(rtad_cjk_path_test PRIVATE rtad_test cmocka)
+    add_test(NAME cjk_path_tests COMMAND rtad_cjk_path_test)
+    set_tests_properties(cjk_path_tests PROPERTIES TIMEOUT 120)
 endif()

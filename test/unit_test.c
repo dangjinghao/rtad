@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <wchar.h>
 #if defined(_MSC_VER)
 #include <windows.h>
 #define PATH_MAX MAX_PATH
@@ -19,6 +20,87 @@
 #endif
 
 #include <limits.h>
+
+static const char *file_open_names[] = {
+    u8"\u4e2d\u6587",                         // Chinese
+    u8"\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8", // Japanese, including Katakana
+    u8"\ud55c\uad6d\uc5b4",                   // Korean
+    u8"\u4e2d\u6587 \u30c6\u30b9\u30c8 \ud55c\uae00", // Mixed, with spaces
+    // A long CJK filename whose UTF-8 and UTF-16 lengths differ.
+    u8"\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d"
+    u8"\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d"
+    u8"\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d"
+    u8"\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d\u4e2d",
+};
+
+static void test_file_open(void **state) {
+  char path[512];
+  snprintf(path, sizeof(path), "test_file_open_%s", (const char *)*state);
+  const char original_data[] = u8"\u4e2d\u6587\0\u65e5\u672c\u8a9e";
+  const char updated_data[] = u8"\ud55c\uad6d\uc5b4 \U00020000";
+  FILE *fp = file_open(path, "wb");
+  assert_non_null(fp);
+  assert_int_equal(fwrite(original_data, 1, sizeof(original_data), fp),
+                   sizeof(original_data));
+  assert_int_equal(fclose(fp), 0);
+  fp = file_open(path, "ab");
+  assert_non_null(fp);
+  assert_int_equal(fwrite(updated_data, 1, sizeof(updated_data), fp),
+                   sizeof(updated_data));
+  assert_int_equal(fclose(fp), 0);
+  fp = file_open(path, "rb");
+  assert_non_null(fp);
+  char data[sizeof(original_data) + sizeof(updated_data)];
+  size_t count = fread(data, 1, sizeof(data), fp);
+  int next = fgetc(fp);
+  int read_error = ferror(fp);
+  assert_int_equal(fclose(fp), 0);
+  assert_int_equal(count, sizeof(data));
+  assert_memory_equal(data, original_data, sizeof(original_data));
+  assert_memory_equal(data + sizeof(original_data), updated_data,
+                      sizeof(updated_data));
+  assert_int_equal(next, EOF);
+  assert_int_equal(read_error, 0);
+  assert_null(file_open("non_existing_directory/file_open_missing", "rb"));
+#if defined(_WIN32)
+  WCHAR wide[512];
+  assert_true(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide,
+                                  512) > 0);
+  assert_int_equal(_wremove(wide), 0);
+#else
+  assert_int_equal(remove(path), 0);
+#endif
+}
+
+#if defined(_WIN32)
+static void test_utf8_path_to_wide(void **state) {
+  (void)state;
+  const char *inputs[] = {"ascii path.exe",
+                          u8"\u4e2d\u6587/\u30c6\u30b9\u30c8 \ud55c\uae00.exe",
+                          u8"\U00020000.exe"};
+  const WCHAR *expected[] = {
+      L"ascii path.exe", L"\u4e2d\u6587/\u30c6\u30b9\u30c8 \ud55c\uae00.exe",
+      L"\U00020000.exe"};
+  for (size_t i = 0; i < sizeof(inputs) / sizeof(inputs[0]); i++) {
+    WCHAR *wide = NULL;
+    assert_int_equal(utf8_path_to_wide(inputs[i], &wide), RTAD_OK);
+    assert_non_null(wide);
+    int matches = wcscmp(wide, expected[i]) == 0;
+    free(wide);
+    assert_true(matches);
+  }
+  WCHAR *wide = NULL;
+  assert_int_equal(utf8_path_to_wide(NULL, &wide), RTAD_ERR_INVALID_ARGUMENT);
+  assert_int_equal(utf8_path_to_wide("x", NULL), RTAD_ERR_INVALID_ARGUMENT);
+  // Truncation, overlong encoding, isolated continuation, encoded surrogate.
+  const char *invalid[] = {"\xe4\xb8", "\xc0\xaf", "\x80", "\xed\xa0\x80"};
+  for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
+    assert_int_equal(utf8_path_to_wide(invalid[i], &wide), RTAD_ERR_IO);
+    assert_null(wide);
+    assert_null(file_open(invalid[i], "rb"));
+  }
+}
+#endif
 
 static void test_exe_path_ok(void **state) {
   (void)state; /* unused */
@@ -757,6 +839,19 @@ static void test_error_string(void **state) {
 
 int main(void) {
   const struct CMUnitTest tests[] = {
+      {"test_file_open_chinese", test_file_open, NULL, NULL,
+       (void *)file_open_names[0]},
+      {"test_file_open_japanese", test_file_open, NULL, NULL,
+       (void *)file_open_names[1]},
+      {"test_file_open_korean", test_file_open, NULL, NULL,
+       (void *)file_open_names[2]},
+      {"test_file_open_mixed", test_file_open, NULL, NULL,
+       (void *)file_open_names[3]},
+      {"test_file_open_long_name", test_file_open, NULL, NULL,
+       (void *)file_open_names[4]},
+#if defined(_WIN32)
+      cmocka_unit_test(test_utf8_path_to_wide),
+#endif
       cmocka_unit_test(test_set_data_replaces_existing_block),
       cmocka_unit_test(test_set_data_invalid_arguments_preserve_file),
       cmocka_unit_test(test_get_data_size_errors),

@@ -47,8 +47,8 @@ RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
     return RTAD_ERR_INVALID_ARGUMENT;
   }
 
-  int result = WideCharToMultiByte(CP_ACP, 0, wc_buf, -1, buffer, (int)buf_size,
-                                   NULL, NULL);
+  int result = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wc_buf, -1,
+                                   buffer, (int)buf_size, NULL, NULL);
   if (result == 0) {
     if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
       return RTAD_ERR_BUFFER_TOO_SMALL;
@@ -58,12 +58,12 @@ RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
   return RTAD_OK;
 }
 
-#if defined(_MSC_VER)
-RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
-  if (!path) {
+RTAD_PRIVATE int utf8_path_to_wide(const char *path, WCHAR **out_path) {
+  if (!path || !out_path) {
     return RTAD_ERR_INVALID_ARGUMENT;
   }
-  int wc_len = MultiByteToWideChar(CP_ACP, 0, path, -1, NULL, 0);
+  int wc_len =
+      MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
   if (wc_len == 0) {
     return RTAD_ERR_IO;
   }
@@ -71,9 +71,20 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   if (!wc_path) {
     return RTAD_ERR_NO_MEMORY;
   }
-  if (MultiByteToWideChar(CP_ACP, 0, path, -1, wc_path, wc_len) == 0) {
+  if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wc_path,
+                          wc_len) == 0) {
     free(wc_path);
     return RTAD_ERR_IO;
+  }
+  *out_path = wc_path;
+  return RTAD_OK;
+}
+
+RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
+  WCHAR *wc_path = NULL;
+  int result = utf8_path_to_wide(path, &wc_path);
+  if (result != RTAD_OK) {
+    return result;
   }
   HANDLE hFile = CreateFileW(wc_path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
                              FILE_ATTRIBUTE_NORMAL, NULL);
@@ -95,23 +106,6 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
   }
   return RTAD_OK;
 }
-
-// GCC or Clang on Windows
-#elif defined(__GNUC__) || defined(__clang__)
-RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
-  if (!path) {
-    return RTAD_ERR_INVALID_ARGUMENT;
-  }
-  if (truncate(path, (off_t)size) != 0) {
-    return RTAD_ERR_IO;
-  }
-  return RTAD_OK;
-}
-
-#else
-#error "Define failed: Unsupported Windows compiler"
-
-#endif
 
 #elif defined(__APPLE__)
 RTAD_PRIVATE int exe_path(char *buffer, size_t buf_size) {
@@ -170,11 +164,27 @@ RTAD_PRIVATE int file_truncate(const char *path, size_t size) {
 
 #endif
 
+RTAD_PRIVATE FILE *file_open(const char *path, const char *mode) {
+#if defined(_WIN32)
+  WCHAR *wc_path = NULL;
+  if (utf8_path_to_wide(path, &wc_path) != RTAD_OK) {
+    return NULL;
+  }
+  // Internal callers only use the ASCII modes "rb", "wb", and "ab".
+  WCHAR wc_mode[] = {(WCHAR)mode[0], (WCHAR)mode[1], L'\0'};
+  FILE *fp = _wfopen(wc_path, wc_mode);
+  free(wc_path);
+  return fp;
+#else
+  return fopen(path, mode);
+#endif
+}
+
 RTAD_PRIVATE ssize_t file_length(const char *path) {
   if (!path) {
     return RTAD_ERR_INVALID_ARGUMENT;
   }
-  FILE *fp = fopen(path, "rb");
+  FILE *fp = file_open(path, "rb");
   if (!fp) {
     return RTAD_ERR_IO;
   }
@@ -194,11 +204,11 @@ RTAD_PRIVATE int file_copy(const char *src_path, const char *dest_path) {
   if (!src_path || !dest_path) {
     return RTAD_ERR_INVALID_ARGUMENT;
   }
-  FILE *src_fp = fopen(src_path, "rb");
+  FILE *src_fp = file_open(src_path, "rb");
   if (!src_fp) {
     return RTAD_ERR_IO;
   }
-  FILE *dest_fp = fopen(dest_path, "wb");
+  FILE *dest_fp = file_open(dest_path, "wb");
   if (!dest_fp) {
     fclose(src_fp);
     return RTAD_ERR_IO;
@@ -229,7 +239,7 @@ RTAD_PRIVATE int file_copy_self(const char *dest_path) {
   if (!dest_path) {
     return RTAD_ERR_INVALID_ARGUMENT;
   }
-  char pathBuf[PATH_MAX];
+  char pathBuf[RTAD_PATH_MAX];
   int result = exe_path(pathBuf, sizeof(pathBuf));
   if (result != RTAD_OK) {
     return result;
@@ -242,7 +252,7 @@ RTAD_PRIVATE int file_append_data(const char *path, const char *data,
   if (!path || !data || data_size == 0) {
     return RTAD_ERR_INVALID_ARGUMENT;
   }
-  FILE *fp = fopen(path, "ab");
+  FILE *fp = file_open(path, "ab");
   if (!fp) {
     return RTAD_ERR_IO;
   }
@@ -262,7 +272,7 @@ RTAD_PRIVATE int rtad_extract_hdr(const char *exe_path,
   if (!header || !exe_path) {
     return RTAD_ERR_INVALID_ARGUMENT;
   }
-  FILE *fp = fopen(exe_path, "rb");
+  FILE *fp = file_open(exe_path, "rb");
   if (!fp) {
     return RTAD_ERR_IO;
   }
@@ -391,7 +401,7 @@ int rtad_set_self_data(const char *data, size_t data_size) {
 #if defined(_WIN32)
   return RTAD_ERR_NOT_SUPPORTED;
 #else
-  char path_buf[PATH_MAX];
+  char path_buf[RTAD_PATH_MAX];
   int result = exe_path(path_buf, sizeof(path_buf));
   if (result != RTAD_OK) {
     return result;
@@ -507,7 +517,7 @@ int rtad_extract_data(const char *exe_path, char **out_data,
   if (result != RTAD_OK) {
     return result;
   }
-  FILE *fp = fopen(exe_path, "rb");
+  FILE *fp = file_open(exe_path, "rb");
   if (!fp) {
     return RTAD_ERR_IO;
   }
@@ -549,7 +559,7 @@ int rtad_extract_self_data(char **out_data, size_t *out_data_size) {
   if (!out_data || !out_data_size) {
     return RTAD_ERR_INVALID_ARGUMENT;
   }
-  char pathBuf[PATH_MAX];
+  char pathBuf[RTAD_PATH_MAX];
   int result = exe_path(pathBuf, sizeof(pathBuf));
   if (result != RTAD_OK) {
     return result;
@@ -558,7 +568,7 @@ int rtad_extract_self_data(char **out_data, size_t *out_data_size) {
 }
 
 int rtad_validate_self_hdr() {
-  char pathBuf[PATH_MAX];
+  char pathBuf[RTAD_PATH_MAX];
   int result = exe_path(pathBuf, sizeof(pathBuf));
   if (result != RTAD_OK) {
     return result;

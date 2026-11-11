@@ -1,5 +1,5 @@
-#ifndef __RTAD_H__
-#define __RTAD_H__
+#ifndef RTAD_H_INCLUDED
+#define RTAD_H_INCLUDED
 #include <stddef.h>
 
 /**

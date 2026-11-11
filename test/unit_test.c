@@ -1,4 +1,11 @@
 #include "rtad_def.h"
+// Regression: internal compatibility names must not rewrite system headers.
+#if defined(_MSC_VER) &&                                                       \
+    (defined(off_t) || defined(ssize_t) || defined(fseeko) || defined(ftello))
+#error "RTAD must not define macros with system type or function names"
+#endif
+#include <sys/types.h>
+#include <sys/stat.h>
 // clang-format off
 // Why cmocka needs stdarg.h but it doesn't include it by itself
 #include <setjmp.h> // IWYU pragma: keep
@@ -11,8 +18,6 @@
 #include <wchar.h>
 #if defined(_MSC_VER)
 #include <windows.h>
-#define PATH_MAX MAX_PATH
-#define ssize_t SSIZE_T
 
 #elif defined(__GNUC__) || defined(__clang__)
 #include <unistd.h>
@@ -104,7 +109,7 @@ static void test_utf8_path_to_wide(void **state) {
 
 static void test_exe_path_ok(void **state) {
   (void)state; /* unused */
-  char buffer[PATH_MAX];
+  char buffer[RTAD_PATH_MAX];
   int result = exe_path(buffer, sizeof(buffer));
   assert_int_equal(result, RTAD_OK);
   assert_true(strlen(buffer) > 0);
@@ -192,7 +197,7 @@ static void test_file_truncate_ok(void **state) {
   __create_tmp_file(__FUNCTION__);
   int result = file_truncate(__FUNCTION__, TMP_FILE_SIZE / 2);
   assert_int_equal(result, RTAD_OK);
-  ssize_t length = file_length(__FUNCTION__);
+  rtad_ssize_t length = file_length(__FUNCTION__);
   assert_int_equal(length, TMP_FILE_SIZE / 2);
 }
 
@@ -211,19 +216,19 @@ static void test_file_truncate_null_path(void **state) {
 static void test_file_length_ok(void **state) {
   (void)state; /* unused */
   __create_tmp_file(__FUNCTION__);
-  ssize_t length = file_length(__FUNCTION__);
+  rtad_ssize_t length = file_length(__FUNCTION__);
   assert_int_equal(length, TMP_FILE_SIZE);
 }
 
 static void test_file_length_wrong_path(void **state) {
   (void)state; /* unused */
-  ssize_t length = file_length("non_existing_file");
+  rtad_ssize_t length = file_length("non_existing_file");
   assert_int_equal(length, RTAD_ERR_IO);
 }
 
 static void test_file_length_null_path(void **state) {
   (void)state; /* unused */
-  ssize_t length = file_length(NULL);
+  rtad_ssize_t length = file_length(NULL);
   assert_int_equal(length, RTAD_ERR_INVALID_ARGUMENT);
 }
 
@@ -234,8 +239,8 @@ static void test_file_copy_ok(void **state) {
 
   int result = file_copy(__FUNCTION__, dest_path);
   assert_int_equal(result, RTAD_OK);
-  ssize_t length_src = file_length(__FUNCTION__);
-  ssize_t length_dest = file_length(dest_path);
+  rtad_ssize_t length_src = file_length(__FUNCTION__);
+  rtad_ssize_t length_dest = file_length(dest_path);
   assert_int_equal(length_src, length_dest);
 }
 
@@ -259,7 +264,7 @@ static void test_file_copy_self_ok(void **state) {
 
   int result = file_copy_self(dest_path);
   assert_int_equal(result, RTAD_OK);
-  char exe_path_buffer[PATH_MAX];
+  char exe_path_buffer[RTAD_PATH_MAX];
   exe_path(exe_path_buffer, sizeof(exe_path_buffer));
   assert_int_equal(__file_content_cmp(exe_path_buffer, dest_path), 0);
 }
@@ -289,7 +294,7 @@ static void test_file_copy_read_failure(void **state) {
 
 static void test_file_append_write_failure(void **state) {
   (void)state;
-  char data[BUFFER_SIZE * 4] = {0};
+  char data[RTAD_COPY_BUFFER_SIZE * 4] = {0};
   assert_int_equal(file_append_data("/dev/full", data, sizeof(data)),
                    RTAD_ERR_IO);
 }
@@ -478,10 +483,10 @@ static void test_rtad_truncate_data_file_smaller_than_hdr(void **state) {
 static void test_rtad_truncate_data_ok(void **state) {
   (void)state; /* unused */
   __create_tmp_file_append_data_hdr(__FUNCTION__, 20);
-  ssize_t length_before = file_length(__FUNCTION__);
+  rtad_ssize_t length_before = file_length(__FUNCTION__);
   int result = rtad_truncate_data(__FUNCTION__);
   assert_int_equal(result, RTAD_OK);
-  ssize_t length_after = file_length(__FUNCTION__);
+  rtad_ssize_t length_after = file_length(__FUNCTION__);
   assert_int_equal(length_before - length_after, 20 + sizeof(struct rtad_hdr));
 }
 
@@ -533,7 +538,7 @@ static void test_rtad_append_packed_data_ok(void **state) {
   FILE *fp = fopen(__FUNCTION__, "rb");
   assert_non_null(fp);
   // Seek to the start of appended data
-  fseeko(fp, -(ssize_t)(data_size + sizeof(struct rtad_hdr)), SEEK_END);
+  rtad_fseeko(fp, -(rtad_off_t)(data_size + sizeof(struct rtad_hdr)), SEEK_END);
   char *data_buf = (char *)malloc(data_size);
   long bytes = fread(data_buf, 1, data_size, fp);
   assert_int_equal(bytes, data_size);
@@ -582,7 +587,7 @@ static void test_rtad_copy_self_with_data_ok(void **state) {
   FILE *fp = fopen(dest_path, "rb");
   assert_non_null(fp);
   // Seek to the start of appended data
-  fseeko(fp, -(ssize_t)(data_size + sizeof(struct rtad_hdr)), SEEK_END);
+  rtad_fseeko(fp, -(rtad_off_t)(data_size + sizeof(struct rtad_hdr)), SEEK_END);
   char *data_buf = (char *)malloc(data_size);
   long bytes = fread(data_buf, 1, data_size, fp);
   assert_int_equal(bytes, data_size);

@@ -1,9 +1,9 @@
-#ifndef __RTAD_PRIVATE_H__
-#define __RTAD_PRIVATE_H__
+#ifndef RTAD_DEF_H_INCLUDED
+#define RTAD_DEF_H_INCLUDED
 
 #include "rtad.h" // IWYU pragma: keep
 
-#define BUFFER_SIZE 4096
+#define RTAD_COPY_BUFFER_SIZE 4096
 
 // platform-specific includes
 #if defined(_WIN32)
@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 // A Windows UTF-16 code unit can expand to three UTF-8 bytes.
 #if defined(_WIN32)
@@ -34,28 +35,23 @@
 // Cross-platform compatibility macros
 #if defined(_MSC_VER)
 #define _CRT_SECURE_NO_WARNINGS
-#define PATH_MAX MAX_PATH
 
-#ifndef ssize_t
-#define ssize_t SSIZE_T
-#endif
+typedef SSIZE_T rtad_ssize_t;
 
-#ifndef off_t
-#define off_t __int64
-#endif
+typedef __int64 rtad_off_t;
 
-#ifndef fseeko
-#define fseeko _fseeki64
-#endif
+#define rtad_fseeko _fseeki64
 
-#ifndef ftello
-#define ftello _ftelli64
-#endif
+#define rtad_ftello _ftelli64
 
 #define RTAD_PACKED_STRUCT(decl)                                               \
   __pragma(pack(push, 1)) decl __pragma(pack(pop))
 
 #elif defined(__GNUC__) || defined(__clang__)
+typedef ssize_t rtad_ssize_t;
+typedef off_t rtad_off_t;
+#define rtad_fseeko fseeko
+#define rtad_ftello ftello
 #define RTAD_PACKED_STRUCT(decl) decl __attribute__((packed))
 
 #if defined(_WIN32)
@@ -117,7 +113,7 @@ RTAD_PACKED_STRUCT(struct rtad_hdr {
 #define RTAD_HDR_SIZE (sizeof(struct rtad_hdr))
 
 // Returns the file size, or a negative rtad_error.
-RTAD_PRIVATE ssize_t file_length(const char *path);
+RTAD_PRIVATE rtad_ssize_t file_length(const char *path);
 RTAD_PRIVATE int file_copy(const char *src_path, const char *dest_path);
 RTAD_PRIVATE int file_copy_self(const char *dest_path);
 RTAD_PRIVATE int file_append_data(const char *path, const char *data,

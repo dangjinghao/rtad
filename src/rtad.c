@@ -180,7 +180,7 @@ RTAD_PRIVATE FILE *file_open(const char *path, const char *mode) {
 #endif
 }
 
-RTAD_PRIVATE ssize_t file_length(const char *path) {
+RTAD_PRIVATE rtad_ssize_t file_length(const char *path) {
   if (!path) {
     return RTAD_ERR_INVALID_ARGUMENT;
   }
@@ -188,11 +188,11 @@ RTAD_PRIVATE ssize_t file_length(const char *path) {
   if (!fp) {
     return RTAD_ERR_IO;
   }
-  if (fseeko(fp, 0, SEEK_END) != 0) {
+  if (rtad_fseeko(fp, 0, SEEK_END) != 0) {
     fclose(fp);
     return RTAD_ERR_IO;
   }
-  off_t size = ftello(fp);
+  rtad_off_t size = rtad_ftello(fp);
   int close_result = fclose(fp);
   if (size < 0 || close_result != 0) {
     return RTAD_ERR_IO;
@@ -213,7 +213,7 @@ RTAD_PRIVATE int file_copy(const char *src_path, const char *dest_path) {
     fclose(src_fp);
     return RTAD_ERR_IO;
   }
-  char copy_buf[BUFFER_SIZE];
+  char copy_buf[RTAD_COPY_BUFFER_SIZE];
   size_t bytes;
   int result = RTAD_OK;
   while ((bytes = fread(copy_buf, 1, sizeof(copy_buf), src_fp)) > 0) {
@@ -276,11 +276,11 @@ RTAD_PRIVATE int rtad_extract_hdr(const char *exe_path,
   if (!fp) {
     return RTAD_ERR_IO;
   }
-  if (fseeko(fp, 0, SEEK_END) != 0) {
+  if (rtad_fseeko(fp, 0, SEEK_END) != 0) {
     fclose(fp);
     return RTAD_ERR_IO;
   }
-  off_t size = ftello(fp);
+  rtad_off_t size = rtad_ftello(fp);
   if (size < 0) {
     fclose(fp);
     return RTAD_ERR_IO;
@@ -291,7 +291,7 @@ RTAD_PRIVATE int rtad_extract_hdr(const char *exe_path,
     }
     return RTAD_ERR_NO_DATA;
   }
-  if (fseeko(fp, -((off_t)RTAD_HDR_SIZE), SEEK_END) != 0) {
+  if (rtad_fseeko(fp, -((rtad_off_t)RTAD_HDR_SIZE), SEEK_END) != 0) {
     fclose(fp);
     return RTAD_ERR_IO;
   }
@@ -347,7 +347,7 @@ int rtad_truncate_data(const char *exe_path) {
   if (result != RTAD_OK) {
     return result;
   }
-  ssize_t file_size = file_length(exe_path);
+  rtad_ssize_t file_size = file_length(exe_path);
   if (file_size < 0) {
     return (int)file_size;
   }
@@ -521,8 +521,9 @@ int rtad_extract_data(const char *exe_path, char **out_data,
   if (!fp) {
     return RTAD_ERR_IO;
   }
-  if (fseeko(fp, -((off_t)header.data_size + (off_t)RTAD_HDR_SIZE), SEEK_END) !=
-      0) {
+  if (rtad_fseeko(fp,
+                  -((rtad_off_t)header.data_size + (rtad_off_t)RTAD_HDR_SIZE),
+                  SEEK_END) != 0) {
     fclose(fp);
     return RTAD_ERR_IO;
   }

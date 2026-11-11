@@ -35,10 +35,23 @@
 #if defined(_MSC_VER)
 #define _CRT_SECURE_NO_WARNINGS
 #define PATH_MAX MAX_PATH
+
+#ifndef ssize_t
 #define ssize_t SSIZE_T
+#endif
+
+#ifndef off_t
 #define off_t __int64
+#endif
+
+#ifndef fseeko
 #define fseeko _fseeki64
+#endif
+
+#ifndef ftello
 #define ftello _ftelli64
+#endif
+
 #define RTAD_PACKED_STRUCT(decl)                                               \
   __pragma(pack(push, 1)) decl __pragma(pack(pop))
 

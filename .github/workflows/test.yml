@@ -9,6 +9,8 @@ on:
 
 jobs:
   format:
+    # Temporary: isolate the Windows ARM64 GCC cleanup failure.
+    if: ${{ false }}
     name: Formatting
     runs-on: ubuntu-latest
     steps:
@@ -24,6 +26,7 @@ jobs:
           pre-commit run yamlfix --all-files --show-diff-on-failure
 
   linux:
+    if: ${{ false }}
     name: Linux-${{ matrix.arch }}-${{ matrix.compiler }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -53,6 +56,7 @@ jobs:
         run: ctest --output-on-failure -C Release
 
   macos:
+    if: ${{ false }}
     name: macOS-${{ matrix.arch }}-${{ matrix.compiler }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -85,19 +89,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        arch: [x64, arm64]
-        compiler: [msvc, gcc, clang]
+        # Temporary: run only this combination while diagnosing cleanup.
         include:
-          - arch: x64
-            os: windows-2025-vs2026
           - arch: arm64
+            compiler: gcc
             os: windows-11-vs2026-arm
-          - compiler: gcc
             generator: Ninja
-          - compiler: clang
-            generator: Ninja
-          - compiler: msvc
-            generator: "Visual Studio 18 2026"
 
     steps:
       - uses: actions/checkout@v7

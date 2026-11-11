@@ -87,10 +87,6 @@ jobs:
       matrix:
         arch: [x64, arm64]
         compiler: [msvc, gcc, clang]
-        exclude:
-          # Temporarily disabled while investigating CJK test cleanup failures.
-          - arch: arm64
-            compiler: gcc
         include:
           - arch: x64
             os: windows-2025-vs2026

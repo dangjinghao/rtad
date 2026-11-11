@@ -67,9 +67,38 @@ static int native_remove(const char *path, int directory) {
 #if defined(_WIN32)
   WCHAR wide[1024];
   wide_path(path, wide, 1024);
-  return directory ? _wrmdir(wide) : _wremove(wide);
+  DWORD error;
+  for (unsigned int attempt = 0;; attempt++) {
+    if (directory ? RemoveDirectoryW(wide) : DeleteFileW(wide)) {
+      return 0;
+    }
+    error = GetLastError();
+    if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
+      errno = ENOENT;
+      return -1;
+    }
+    // Executable mappings or external handles can delay deletion after exit.
+    // Pending file deletion can also temporarily leave a directory nonempty.
+    int retryable = error == ERROR_SHARING_VIOLATION ||
+                    error == ERROR_ACCESS_DENIED ||
+                    (directory && error == ERROR_DIR_NOT_EMPTY);
+    if (!retryable || attempt == 40) {
+      break;
+    }
+    Sleep(50);
+  }
+  fprintf(stderr, "%s failed for '%s': Windows error %lu\n",
+          directory ? "RemoveDirectoryW" : "DeleteFileW", path, error);
+  errno = EIO;
+  return -1;
 #else
-  return directory ? rmdir(path) : unlink(path);
+  int result = directory ? rmdir(path) : unlink(path);
+  if (result != 0 && errno != ENOENT) {
+    int error = errno;
+    fprintf(stderr, "Removing '%s' failed: %s\n", path, strerror(error));
+    errno = error;
+  }
+  return result;
 #endif
 }
 

@@ -682,7 +682,9 @@ static void test_public_error_codes(void **state) {
                    RTAD_ERR_IO);
   assert_int_equal(rtad_copy_self_with_data(".", "x", 1), RTAD_ERR_IO);
   assert_int_equal(rtad_truncate_self_data("."), RTAD_ERR_IO);
-  assert_int_equal(rtad_truncate_self_data(NULL), RTAD_ERR_INVALID_ARGUMENT);
+#if defined(_WIN32)
+  assert_int_equal(rtad_truncate_self_data(NULL), RTAD_ERR_NOT_SUPPORTED);
+#endif
   assert_int_equal(rtad_free_extracted_data(NULL), RTAD_ERR_INVALID_ARGUMENT);
   __create_tmp_file(__FUNCTION__);
   assert_int_equal(rtad_extract_data(__FUNCTION__, &data, &size),
@@ -842,8 +844,34 @@ static void test_error_string(void **state) {
   assert_string_equal(rtad_error_string(-999), "Unknown RTAD error");
 }
 
+static void test_truncate_self_data_save_to(void **state) {
+  (void)state;
+  assert_int_equal(rtad_truncate_self_data_save_to(NULL),
+                   RTAD_ERR_INVALID_ARGUMENT);
+  assert_int_equal(rtad_truncate_self_data_save_to("."), RTAD_ERR_IO);
+  assert_int_equal(rtad_truncate_self_data_save_to(__FUNCTION__), RTAD_OK);
+  assert_true(file_length(__FUNCTION__) > 0);
+  assert_int_equal(rtad_validate_hdr(__FUNCTION__), RTAD_ERR_NO_DATA);
+  assert_int_equal(remove(__FUNCTION__), 0);
+}
+
+static void test_set_self_data_arguments(void **state) {
+  (void)state;
+  assert_int_equal(rtad_set_self_data(NULL, 1), RTAD_ERR_INVALID_ARGUMENT);
+#if SIZE_MAX > UINT32_MAX
+  assert_int_equal(rtad_set_self_data("x", (size_t)UINT32_MAX + 1),
+                   RTAD_ERR_TOO_LARGE);
+#endif
+#if defined(_WIN32)
+  assert_int_equal(rtad_set_self_data(NULL, 0), RTAD_ERR_NOT_SUPPORTED);
+  assert_int_equal(rtad_set_self_data("x", 0), RTAD_ERR_NOT_SUPPORTED);
+#endif
+}
+
 int main(void) {
   const struct CMUnitTest tests[] = {
+      cmocka_unit_test(test_truncate_self_data_save_to),
+      cmocka_unit_test(test_set_self_data_arguments),
       {"test_file_open_chinese", test_file_open, NULL, NULL,
        (void *)file_open_names[0]},
       {"test_file_open_japanese", test_file_open, NULL, NULL,

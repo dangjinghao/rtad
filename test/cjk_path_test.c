@@ -265,10 +265,23 @@ static void test_self_update(void **state) {
   assert_int_equal(run_child(f, "--update-self"), 0);
   assert_payload(f->path, updated_data, sizeof(updated_data));
   assert_int_equal(run_child(f, "--read-updated-self"), 0);
+  assert_int_equal(run_child(f, "--clear-self"), 0);
+  assert_int_equal(rtad_validate_hdr(f->path), RTAD_ERR_NO_DATA);
+  assert_int_equal(run_child(f, "--read-empty-self"), 0);
 }
 #endif
 
 static int child_main(const char *mode, const char *dest) {
+  if (strcmp(mode, "--clear-self") == 0) {
+    return rtad_truncate_self_data(NULL) != RTAD_OK;
+  }
+  if (strcmp(mode, "--read-empty-self") == 0) {
+    char *data = NULL;
+    size_t size = 0;
+    int result = rtad_extract_self_data(&data, &size);
+    rtad_free_extracted_data(data);
+    return result != RTAD_ERR_NO_DATA;
+  }
   if (strcmp(mode, "--update-self") == 0) {
     return rtad_set_self_data(updated_data, sizeof(updated_data)) != RTAD_OK;
   }

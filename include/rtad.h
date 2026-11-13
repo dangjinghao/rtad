@@ -67,8 +67,10 @@ int rtad_set_data(const char *exe_path, const char *data, size_t data_size);
  * this API again or rely on other self APIs in the old process after success.
  * On macOS, this does not repair or guarantee validity of code signatures.
  *
- * @param data Non-NULL replacement payload.
- * @param data_size Number of bytes, from 1 through UINT32_MAX.
+ * @param data Replacement payload; required when data_size > 0, ignored at 0.
+ * @param data_size Number of bytes, from 0 through UINT32_MAX. Zero removes
+ * the payload by replacing self with a clean copy, including when no payload
+ * exists. A nonzero size containing only NUL bytes remains a valid payload.
  * @return RTAD_OK on success, a negative rtad_error on failure.
  */
 int rtad_set_self_data(const char *data, size_t data_size);
@@ -92,10 +94,16 @@ int rtad_get_data_size(const char *exe_path, size_t *out_size);
  */
 int rtad_truncate_data(const char *exe_path);
 /**
- * @brief Truncate appended data from the executable itself.
- * On failure, new_path may contain an incomplete copy.
+ * @brief Create a clean copy of self, or replace self when new_path is NULL.
+ * A non-NULL path receives a copy without the RTAD payload on all platforms;
+ * on failure that destination may contain an incomplete copy.
+ * NULL replaces self on Linux/macOS using the same procedure and restrictions
+ * as rtad_set_self_data. Prevent concurrent updates, exit promptly on success,
+ * and restart before using self APIs again. Windows returns
+ * RTAD_ERR_NOT_SUPPORTED for NULL. A file without a payload is also copied
+ * and replaced successfully; malformed trailers are rejected.
  *
- * @param new_path
+ * @param new_path Destination path, or NULL to replace the running executable.
  * @return int RTAD_OK on success, a negative rtad_error on failure.
  */
 int rtad_truncate_self_data(const char *new_path);

@@ -392,7 +392,7 @@ int rtad_set_data(const char *exe_path, const char *data, size_t data_size) {
 }
 
 int rtad_set_self_data(const char *data, size_t data_size) {
-  if (!data || data_size == 0) {
+  if (!data && data_size != 0) {
     return RTAD_ERR_INVALID_ARGUMENT;
   }
   if (data_size > UINT32_MAX) {
@@ -436,13 +436,15 @@ int rtad_set_self_data(const char *data, size_t data_size) {
     goto cleanup;
   }
   temp_created = 1;
-  result = rtad_truncate_self_data(temp);
+  result = rtad_truncate_self_data_save_to(temp);
   if (result != RTAD_OK) {
     goto cleanup;
   }
-  result = rtad_set_data(temp, data, data_size);
-  if (result != RTAD_OK) {
-    goto cleanup;
+  if (data_size != 0) {
+    result = rtad_set_data(temp, data, data_size);
+    if (result != RTAD_OK) {
+      goto cleanup;
+    }
   }
   // The path-based helpers close their streams before we sync this file.
   result = RTAD_ERR_IO;
@@ -465,6 +467,9 @@ int rtad_set_self_data(const char *data, size_t data_size) {
   }
   size_t stored_size = 0;
   result = rtad_get_data_size(temp, &stored_size);
+  if (data_size == 0 && result == RTAD_ERR_NO_DATA) {
+    result = RTAD_OK;
+  }
   if (result != RTAD_OK) {
     goto cleanup;
   }
@@ -577,10 +582,17 @@ int rtad_validate_self_hdr() {
   return rtad_validate_hdr(pathBuf);
 }
 
-int rtad_truncate_self_data(const char *new_path) {
+RTAD_PRIVATE int rtad_truncate_self_data_save_to(const char *new_path) {
   int result = file_copy_self(new_path);
   if (result != RTAD_OK) {
     return result;
   }
   return rtad_truncate_data(new_path);
+}
+
+int rtad_truncate_self_data(const char *new_path) {
+  if (!new_path) {
+    return rtad_set_self_data(NULL, 0);
+  }
+  return rtad_truncate_self_data_save_to(new_path);
 }

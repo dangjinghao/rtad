@@ -131,7 +131,6 @@ static void test_copy_self_with_data(void **state) {
 static void test_self_update_arguments(void **state) {
   (void)state;
   assert_int_equal(rtad_set_self_data(NULL, 1), RTAD_ERR_INVALID_ARGUMENT);
-  assert_int_equal(rtad_set_self_data("x", 0), RTAD_ERR_INVALID_ARGUMENT);
   // These platforms have 64-bit size_t in the supported test matrix.
   if (sizeof(size_t) > 4) {
     assert_int_equal(rtad_set_self_data("x", (size_t)0xffffffffU + 1),
@@ -139,6 +138,9 @@ static void test_self_update_arguments(void **state) {
   }
 #if defined(_WIN32)
   assert_int_equal(rtad_set_self_data("x", 1), RTAD_ERR_NOT_SUPPORTED);
+  assert_int_equal(rtad_set_self_data(NULL, 0), RTAD_ERR_NOT_SUPPORTED);
+  assert_int_equal(rtad_set_self_data("x", 0), RTAD_ERR_NOT_SUPPORTED);
+  assert_int_equal(rtad_truncate_self_data(NULL), RTAD_ERR_NOT_SUPPORTED);
 #endif
 }
 
@@ -160,6 +162,33 @@ static int run_self_update_child(const char *path, const char *mode) {
 }
 
 static int self_update_child(const char *mode) {
+  if (strcmp(mode, "--update-nul-byte") == 0) {
+    return rtad_set_self_data("", 1) != RTAD_OK;
+  }
+  if (strcmp(mode, "--verify-nul-byte") == 0) {
+    char *data = NULL;
+    size_t size = 0;
+    int result = rtad_extract_self_data(&data, &size);
+    int matches = result == RTAD_OK && size == 1 && data[0] == '\0';
+    rtad_free_extracted_data(data);
+    return !matches;
+  }
+  if (strcmp(mode, "--update-clear-via-set") == 0) {
+    return rtad_set_self_data(NULL, 0) != RTAD_OK;
+  }
+  if (strcmp(mode, "--update-clear-zero-size") == 0) {
+    return rtad_set_self_data("ignored", 0) != RTAD_OK;
+  }
+  if (strcmp(mode, "--update-clear") == 0) {
+    return rtad_truncate_self_data(NULL) != RTAD_OK;
+  }
+  if (strcmp(mode, "--verify-empty") == 0) {
+    char *data = NULL;
+    size_t size = 0;
+    int result = rtad_extract_self_data(&data, &size);
+    rtad_free_extracted_data(data);
+    return result != RTAD_ERR_NO_DATA;
+  }
   size_t size = the_data_size;
   if (strcmp(mode, "--update-short") == 0 ||
       strcmp(mode, "--verify-short") == 0) {
@@ -177,7 +206,8 @@ static int self_update_child(const char *mode) {
     return !matches;
   }
 #if defined(__linux__)
-  if (strcmp(mode, "--update-fail-write") == 0) {
+  if (strcmp(mode, "--update-fail-write") == 0 ||
+      strcmp(mode, "--update-clear-fail-write") == 0) {
     struct rlimit limit;
     if (signal(SIGXFSZ, SIG_IGN) == SIG_ERR ||
         getrlimit(RLIMIT_FSIZE, &limit) != 0) {
@@ -186,6 +216,9 @@ static int self_update_child(const char *mode) {
     limit.rlim_cur = 1;
     if (setrlimit(RLIMIT_FSIZE, &limit) != 0) {
       return 2;
+    }
+    if (strcmp(mode, "--update-clear-fail-write") == 0) {
+      return rtad_truncate_self_data(NULL) != RTAD_ERR_IO;
     }
     return rtad_set_self_data(the_data, size) != RTAD_ERR_IO;
   }
@@ -247,6 +280,29 @@ static void test_self_update_restarts(void **state) {
     assert_int_equal(second.st_ino, third.st_ino);
     assert_int_equal(run_self_update_child(path, "--verify-long"), 0);
   }
+#if defined(__linux__)
+  assert_int_equal(run_self_update_child(path, "--update-clear-fail-write"), 0);
+  assert_int_equal(stat(path, &second), 0);
+  assert_int_equal(second.st_ino, third.st_ino);
+  assert_int_equal(run_self_update_child(path, "--verify-long"), 0);
+#endif
+  assert_int_equal(run_self_update_child(link, "--update-clear"), 0);
+  assert_int_equal(run_self_update_child(path, "--verify-empty"), 0);
+  assert_int_equal(stat(path, &second), 0);
+  assert_int_equal(second.st_size, original.st_size);
+  assert_int_equal(second.st_mode & 07777, original.st_mode & 07777);
+  assert_int_equal(second.st_uid, original.st_uid);
+  assert_int_equal(second.st_gid, original.st_gid);
+  assert_int_equal(run_self_update_child(path, "--update-clear"), 0);
+  assert_int_equal(run_self_update_child(path, "--verify-empty"), 0);
+  assert_int_equal(run_self_update_child(path, "--update-long"), 0);
+  assert_int_equal(run_self_update_child(path, "--update-clear-via-set"), 0);
+  assert_int_equal(run_self_update_child(path, "--verify-empty"), 0);
+  assert_int_equal(run_self_update_child(path, "--update-long"), 0);
+  assert_int_equal(run_self_update_child(path, "--update-clear-zero-size"), 0);
+  assert_int_equal(run_self_update_child(path, "--verify-empty"), 0);
+  assert_int_equal(run_self_update_child(path, "--update-nul-byte"), 0);
+  assert_int_equal(run_self_update_child(path, "--verify-nul-byte"), 0);
   assert_int_equal(unlink(link), 0);
   assert_int_equal(unlink(path), 0);
   // Also checks that the API cleaned up its temporary files.

@@ -112,6 +112,7 @@ RTAD_PACKED_STRUCT(struct rtad_hdr {
 
 #define RTAD_HDR_SIZE (sizeof(struct rtad_hdr))
 
+RTAD_PRIVATE int rtad_truncate_self_data_save_to(const char *new_path);
 // Returns the file size, or a negative rtad_error.
 RTAD_PRIVATE rtad_ssize_t file_length(const char *path);
 RTAD_PRIVATE int file_copy(const char *src_path, const char *dest_path);

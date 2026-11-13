@@ -28,6 +28,7 @@ cmake --build out/dev --config Debug --parallel 2
 
 Include [`rtad.h`](include/rtad.h) and link against `rtad`.
 
+See [`rtad.h`](include/rtad.h) for full document.
 
 ## Examples
 
@@ -61,6 +62,6 @@ Example 1 stores the terminating NUL; Example 2 stores only the text bytes. On W
 
 - Windows paths must be **UTF-8**, not ACP-encoded strings. RTAD converts them to UTF-16; invalid UTF-8 returns `RTAD_ERR_IO`. Executable lookup retains the Windows `MAX_PATH` limit. Linux/macOS use native filesystem bytes, normally UTF-8. Payloads are never transcoded.
 - Copy operations overwrite destinations and may leave partial output on failure. Use a separate destination. `rtad_set_data` requires an existing file and is not atomic: a write failure can lose its previous payload.
-- Prevent concurrent updates. After successful `rtad_set_self_data`, exit promptly and restart; do not keep reading or updating through the old process.
+- Prevent concurrent updates. After successful `rtad_set_self_data` or `rtad_truncate_self_data(NULL)`, exit promptly and restart; do not keep reading or updating through the old process.
 - Self-update prepares a sibling temporary file before renaming it over the executable. Failures before rename preserve the original. The directory must be writable; owner, group and permission bits are preserved, but ACLs and extended attributes are not. Symlinks resolve to their targets; other hard links retain the old file. Crashes may leave temporary files, and replacement is not guaranteed durable across power loss.
 - macOS updates do not re-sign executables or guarantee code-signature/Gatekeeper acceptance.
